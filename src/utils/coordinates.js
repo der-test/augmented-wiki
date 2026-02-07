@@ -214,15 +214,18 @@ export function projectToScreen(
   // Horizontal position: map azimuthDiff from [-halfHFOV, +halfHFOV] to [0, screenWidth]
   const x = (screenWidth / 2) + (azimuthDiff / horizontalFOV) * screenWidth;
   
-  // Vertical position: Distribute evenly across FULL screen height based on distance
-  // Use linear interpolation: closer POIs at bottom (90%), farther at top (10%)
-  // maxDistance = 10km assumed for now (will be adjusted by collision detection)
-  const maxDistance = 10000; // 10km
-  const normalizedDistance = Math.min(distance / maxDistance, 1.0);
+  // Vertical position: Distribute across screen height based on distance
+  // Use actual distance range for better distribution
+  // Closer POIs appear in middle to lower screen, farther ones in upper to middle screen
+  // This creates natural depth perception without requiring altitude data
   
-  // Map normalized distance to screen: 0m->90%, 10km->10%
-  // Close POIs at bottom, far POIs at top
-  const yPercent = 0.90 - (normalizedDistance * 0.80);
+  // Use a more realistic max distance based on typical visibility (5km)
+  const effectiveMaxDistance = 5000; // 5km typical max for AR visibility
+  const normalizedDistance = Math.min(distance / effectiveMaxDistance, 1.0);
+  
+  // Map to screen: 0m->70%, 5km->20% (broader distribution with middle focus)
+  // This spreads POIs from 20% to 70% of screen height (50% of total height)
+  const yPercent = 0.70 - (normalizedDistance * 0.50);
   
   const y = screenHeight * yPercent;
   

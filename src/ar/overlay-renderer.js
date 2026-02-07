@@ -310,11 +310,20 @@ export class OverlayRenderer {
 
           if (horizontalOverlap && verticalOverlap) {
             hasCollision = true;
-            // Shift down to avoid collision
-            pos.y += verticalOffset;
-            // Keep within screen bounds
-            if (pos.y > this.screenDimensions.height - labelHeight) {
-              pos.y = this.screenDimensions.height - labelHeight;
+            // Alternate between shifting up and down to distribute labels
+            // Use attempt count to determine direction
+            if (attempts % 2 === 0) {
+              // Shift down
+              pos.y += verticalOffset;
+              if (pos.y > this.screenDimensions.height - labelHeight) {
+                pos.y = this.screenDimensions.height - labelHeight;
+              }
+            } else {
+              // Shift up
+              pos.y -= verticalOffset;
+              if (pos.y < labelHeight) {
+                pos.y = labelHeight;
+              }
             }
             break;
           }
@@ -394,7 +403,7 @@ export class OverlayRenderer {
     // Inline styles for maximum compatibility
     label.style.cssText = `
       position: absolute;
-      transform: translate(-50%, -50%);
+      transform: translateX(-50%);
       background: rgba(0, 0, 0, 0.8);
       color: white;
       padding: 8px 12px;
