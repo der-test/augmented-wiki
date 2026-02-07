@@ -16,7 +16,7 @@ const OVERPASS_ENDPOINT = 'https://overpass-api.de/api/interpreter';
 const DEFAULT_SEARCH_RADIUS = 5000; // 5km in meters
 const DEFAULT_MAX_RESULTS = 100;
 const CACHE_DURATION = 300000; // 5 minutes in milliseconds
-const REQUEST_TIMEOUT = 5000; // 5 seconds (Reduced to fail faster)
+const REQUEST_TIMEOUT = 15000; // 15 seconds (Increased for mobile networks)
 
 // Rate limiting configuration
 const MIN_REQUEST_INTERVAL = 1000; // Minimum 1 second between requests

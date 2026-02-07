@@ -313,8 +313,8 @@ class AugmentedWikiApp {
                 errorMsg = 'Network error - check CORS/connection';
             } else if (error.message.includes('429')) {
                 errorMsg = 'Rate limited - wait a moment';
-            } else if (error.message.includes('timeout')) {
-                errorMsg = 'Request timeout - slow connection';
+            } else if (error.name === 'AbortError' || error.message.includes('aborted') || error.message.includes('timeout')) {
+                errorMsg = 'Timeout - network slow';
             }
             
             this.elements.debugTotalPois.textContent = `Error: ${errorMsg}`;
