@@ -318,11 +318,22 @@ class AugmentedWikiApp {
             }
             
             this.elements.debugTotalPois.textContent = `Error: ${errorMsg}`;
+            this.elements.poiCount.textContent = 'Error';
             
             // Don't show popup for every error, just log it
             // this.showError('Failed to fetch POIs: ' + error.message);
         } finally {
             this.isFetchingPOIs = false;
+            
+            // Safety check: ensure "Loading..." state is cleared
+            // If we still have the loading spinner in the text, it means something prevented the update
+            if (this.elements.poiCount.innerHTML.includes('loading-spinner')) {
+                if (this.lastFetchedPOIs && this.lastFetchedPOIs.length > 0) {
+                     this._updateVisibleCount();
+                } else {
+                     this.elements.poiCount.textContent = '0 POIs';
+                }
+            }
         }
     }
 
