@@ -40,6 +40,12 @@ class AugmentedWikiApp {
             poiCount: document.getElementById('poi-count'),
             poiList: document.getElementById('poi-list'),
             
+            // Error modal
+            errorModal: document.getElementById('error-modal'),
+            errorMessage: document.getElementById('error-message'),
+            errorHelp: document.getElementById('error-help'),
+            errorDismissBtn: document.getElementById('error-dismiss-btn'),
+            
             // New UI Elements
             debugToggleBtn: document.getElementById('debug-toggle-btn'),
             debugPanel: document.getElementById('debug-panel'),
@@ -87,6 +93,7 @@ class AugmentedWikiApp {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.calibrationDoneBtn.addEventListener('click', () => this.finishCalibration());
         this.elements.backToARBtn.addEventListener('click', () => this.showARView());
+        this.elements.errorDismissBtn.addEventListener('click', () => this.dismissError());
         
         // Debug toggle
         this.elements.debugToggleBtn.addEventListener('click', () => {
@@ -140,9 +147,14 @@ class AugmentedWikiApp {
                     });
             },
             (error) => {
-                const message = this.geolocator.getPositionErrorMessage(error);
-                console.error('Geolocation error:', error);
-                this.showError(message);
+                console.error('Geolocation error code:', error.code, 'message:', error.message);
+                
+                if (error.code === 1) { // PERMISSION_DENIED
+                    this.showLocationDeniedError();
+                } else {
+                    const message = this.geolocator.getPositionErrorMessage(error);
+                    this.showError(message);
+                }
                 this.elements.startBtn.disabled = false;
                 this.elements.startBtn.textContent = 'Start';
             },
@@ -530,11 +542,49 @@ class AugmentedWikiApp {
     }
 
     /**
-     * Show error message
+     * Show error message in on-page modal (not alert — alerts interfere with iOS permissions)
      */
-    showError(message) {
-        alert(message); // Simple error display
-        // In production, use a proper modal or toast notification
+    showError(message, helpHTML = '') {
+        this.elements.errorMessage.textContent = message;
+        this.elements.errorHelp.innerHTML = helpHTML;
+        this.elements.errorModal.classList.add('active');
+    }
+
+    /**
+     * Show location-denied error with platform-specific reset instructions
+     */
+    showLocationDeniedError() {
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        
+        let helpHTML = '';
+        if (isIOS) {
+            helpHTML = `
+                <strong>Safari has blocked location for this site.</strong>
+                <br>To fix, reset Safari's per-site location setting:
+                <ol>
+                    <li>Open <b>Settings</b> → <b>Apps</b> → <b>Safari</b></li>
+                    <li>Tap <b>Location</b> (under "Settings for Websites")</li>
+                    <li>Find this site and change to <b>Ask</b> or <b>Allow</b></li>
+                    <li>Come back here and tap <b>Try Again</b></li>
+                </ol>
+                <em>Or: Settings → Apps → Safari → Clear History and Website Data (resets all sites)</em>`;
+        } else {
+            helpHTML = `
+                <strong>Location access was denied.</strong>
+                <br>Click the lock/info icon in your browser's address bar, 
+                find "Location" and set it to "Allow", then try again.`;
+        }
+        
+        this.showError('Location permission denied', helpHTML);
+    }
+
+    /**
+     * Dismiss error modal and return to start screen
+     */
+    dismissError() {
+        this.elements.errorModal.classList.remove('active');
+        this.showScreen('permission');
     }
 
     /**
