@@ -40,20 +40,23 @@ export class POIDetector {
 
   /**
    * Build Overpass QL query to find POIs with Wikipedia/Wikidata tags
+   * Filters for tourism attractions and historic sites only
    * @param {number} lat - Center latitude
    * @param {number} lng - Center longitude
    * @param {number} radius - Search radius in meters
    * @returns {string} Overpass QL query
    */
   _buildOverpassQuery(lat, lng, radius) {
-    // Query for nodes and ways with wikipedia or wikidata tags
+    // Query for tourism=attraction and historic=* with wikipedia/wikidata tags
     // Use around filter for radius search
     // Return JSON format with all tags
     return `
       [out:json][timeout:25];
       (
-        node(around:${radius},${lat},${lng})[~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
-        way(around:${radius},${lat},${lng})[~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
+        node(around:${radius},${lat},${lng})["tourism"="attraction"][~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
+        way(around:${radius},${lat},${lng})["tourism"="attraction"][~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
+        node(around:${radius},${lat},${lng})["historic"][~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
+        way(around:${radius},${lat},${lng})["historic"][~"^(wikipedia|wikidata)$"~"."](if:t["name"]);
       );
       out center tags ${DEFAULT_MAX_RESULTS};
     `.trim();
