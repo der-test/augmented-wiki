@@ -39,12 +39,6 @@ class AugmentedWikiApp {
             gpsStatus: document.getElementById('gps-status'),
             poiCount: document.getElementById('poi-count'),
             poiList: document.getElementById('poi-list'),
-
-            // Error modal
-            errorModal: document.getElementById('error-modal'),
-            errorMessage: document.getElementById('error-message'),
-            errorHelp: document.getElementById('error-help'),
-            errorDismissBtn: document.getElementById('error-dismiss-btn'),
             
             // New UI Elements
             debugToggleBtn: document.getElementById('debug-toggle-btn'),
@@ -93,7 +87,6 @@ class AugmentedWikiApp {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.calibrationDoneBtn.addEventListener('click', () => this.finishCalibration());
         this.elements.backToARBtn.addEventListener('click', () => this.showARView());
-        this.elements.errorDismissBtn.addEventListener('click', () => this.dismissError());
         
         // Debug toggle
         this.elements.debugToggleBtn.addEventListener('click', () => {
@@ -119,103 +112,69 @@ class AugmentedWikiApp {
             return;
         }
 
-        console.log('[AugmentedWiki] start() called, secure context:', window.isSecureContext, 'protocol:', location.protocol);
+        // iOS Safari requires enableHighAccuracy: true to reliably trigger the
+        // native location permission prompt. Using true on all platforms is fine.
+        const initialOptions = {
+            enableHighAccuracy: true,
+            timeout: 30000,
+            maximumAge: 0
+        };
 
-        // Try Permissions API to detect cached denial before triggering geolocation
-        // (Safari 16+ supports this; older browsers skip to direct geolocation call)
-        const permCheck = (navigator.permissions && navigator.permissions.query)
-            ? navigator.permissions.query({ name: 'geolocation' }).catch(() => null)
-            : Promise.resolve(null);
+        // On iOS Safari, permission prompts must be initiated synchronously from a
+        // user gesture handler. Use Promise.all to request Camera and Location in
+        // parallel so both calls attach to the original button tap event. Requesting
+        // them sequentially (location first, camera in the async success callback)
+        // causes iOS Safari to silently deny the second permission.
+        const locationPromise = new Promise((resolve, reject) => {
+            // iOS Safari may occasionally fail to fire either callback.
+            // Add a fallback timeout beyond the API timeout as a safety net.
+            const fallbackTimeout = setTimeout(() => {
+                reject({
+                    code: 3,
+                    PERMISSION_DENIED: 1,
+                    POSITION_UNAVAILABLE: 2,
+                    TIMEOUT: 3
+                });
+            }, 35000);
 
-        permCheck.then((permStatus) => {
-            if (permStatus) {
-                console.log('[AugmentedWiki] Permissions API state:', permStatus.state);
-            } else {
-                console.log('[AugmentedWiki] Permissions API not available, calling geolocation directly');
-            }
-
-            // If Permissions API reports 'denied', skip the geolocation call entirely
-            // and show reset instructions immediately
-            if (permStatus && permStatus.state === 'denied') {
-                console.warn('[AugmentedWiki] Location permission is denied (cached). Showing reset instructions.');
-                this._handleLocationDenied();
-                return;
-            }
-
-            // Call getCurrentPosition directly in the gesture context
-            console.log('[AugmentedWiki] Calling getCurrentPosition...');
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    console.log('[AugmentedWiki] Got position:', position.coords.latitude, position.coords.longitude);
-                    this.geolocator.startWithPosition(position)
-                        .then(() => {
-                            this.elements.startBtn.textContent = 'Requesting Camera...';
-                            return this.cameraStream.start(this.elements.camera);
-                        })
-                        .then(() => {
-                            this.showScreen('calibration');
-                        })
-                        .catch((error) => {
-                            console.error('[AugmentedWiki] Startup error:', error);
-                            this.showError(error.message);
-                            this.elements.startBtn.disabled = false;
-                            this.elements.startBtn.textContent = 'Start';
-                        });
+                    clearTimeout(fallbackTimeout);
+                    resolve(position);
                 },
                 (error) => {
-                    console.error('[AugmentedWiki] Geolocation error - code:', error.code, 'message:', error.message);
-                    if (error.code === 1) {
-                        this._handleLocationDenied();
-                    } else {
-                        const msg = this.geolocator.getPositionErrorMessage(error);
-                        this.showError(msg);
-                        this.elements.startBtn.disabled = false;
-                        this.elements.startBtn.textContent = 'Start';
-                    }
+                    clearTimeout(fallbackTimeout);
+                    reject(error);
                 },
-                { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+                initialOptions
             );
         });
-    }
 
-    /**
-     * Handle location permission denied - show platform-specific reset instructions
-     * @private
-     */
-    _handleLocationDenied() {
-        this.elements.startBtn.disabled = false;
-        this.elements.startBtn.textContent = 'Start';
+        const cameraPromise = this.cameraStream.start(this.elements.camera);
 
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-                      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        Promise.all([locationPromise, cameraPromise])
+            .then(([position]) => {
+                this.elements.startBtn.textContent = 'Requesting Camera...';
+                return this.geolocator.startWithPosition(position);
+            })
+            .then(() => {
+                this.showScreen('calibration');
+            })
+            .catch((error) => {
+                // Clean up camera if it started but location failed (or vice versa)
+                this.cameraStream.stop();
 
-        let helpHTML;
-        if (isIOS) {
-            helpHTML = `
-                <strong>Safari has a cached "Deny" for this site's location.</strong>
-                <br><br>
-                <b>Quick fix (in Safari):</b>
-                <ol>
-                    <li>Tap the <b>"aA"</b> button in the Safari address bar</li>
-                    <li>Tap <b>"Website Settings"</b></li>
-                    <li>Set <b>Location</b> to <b>"Ask"</b> or <b>"Allow"</b></li>
-                    <li>Close this dialog and tap <b>Start</b> again</li>
-                </ol>
-                <b>Alternative (in iOS Settings):</b>
-                <ol>
-                    <li>Open <b>Settings → Apps → Safari</b></li>
-                    <li>Tap <b>Location</b></li>
-                    <li>Set to <b>"Ask"</b> or <b>"Allow"</b></li>
-                </ol>
-                <em style="font-size:0.85em">If all else fails: Settings → Safari → Clear History and Website Data</em>`;
-        } else {
-            helpHTML = `
-                <strong>Location access was denied for this site.</strong>
-                <br><br>
-                Click the lock/info icon in the address bar, find "Location" and set it to "Allow", then try again.`;
-        }
-
-        this.showError('Location permission denied', helpHTML);
+                console.error('Startup error:', error);
+                // GeolocationPositionError has a numeric .code property (1-3)
+                if (error && typeof error.code === 'number' && error.code >= 1 && error.code <= 3) {
+                    const message = this.geolocator.getPositionErrorMessage(error);
+                    this.showError(message);
+                } else {
+                    this.showError(error.message);
+                }
+                this.elements.startBtn.disabled = false;
+                this.elements.startBtn.textContent = 'Start';
+            });
     }
 
     /**
@@ -598,20 +557,11 @@ class AugmentedWikiApp {
     }
 
     /**
-     * Show error in on-page modal (never use alert() - it blocks iOS permission prompts)
+     * Show error message
      */
-    showError(message, helpHTML = '') {
-        this.elements.errorMessage.textContent = message;
-        this.elements.errorHelp.innerHTML = helpHTML;
-        this.elements.errorModal.classList.add('active');
-    }
-
-    /**
-     * Dismiss error modal and return to start screen
-     */
-    dismissError() {
-        this.elements.errorModal.classList.remove('active');
-        this.showScreen('permission');
+    showError(message) {
+        alert(message); // Simple error display
+        // In production, use a proper modal or toast notification
     }
 
     /**
