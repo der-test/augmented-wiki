@@ -379,7 +379,10 @@ export class OverlayRenderer {
     for (const [poiId, element] of this.labelElements) {
        // If a label exists but is NOT in the current display set, remove it
       if (!displayPOIIds.has(poiId)) {
-        this._fadeOutLabel(poiId, element);
+        // Only fade out if not already fading
+        if (!element._isFading) {
+            this._fadeOutLabel(poiId, element);
+        }
       }
     }
 
@@ -401,6 +404,15 @@ export class OverlayRenderer {
         if (!state.articleData && !state.isLoading) {
           this._fetchArticleData(poiId, state);
         }
+      } else {
+          // Element exists. If it was fading out, CANCEL THE DEATH!
+          if (element._fadeTimeout) {
+              clearTimeout(element._fadeTimeout);
+              element._fadeTimeout = null;
+          }
+          element._isFading = false;
+          element.style.opacity = '1';
+          element.style.display = 'block';
       }
 
       // Calculate Z-Index: Closest (index 0) gets highest value
@@ -547,14 +559,19 @@ export class OverlayRenderer {
    * @param {HTMLElement} element - Label element
    */
   _fadeOutLabel(poiId, element) {
+    if (element._isFading) return; // Already dying
+    
+    element._isFading = true;
     element.style.opacity = '0';
     
     // Remove after transition
-    setTimeout(() => {
+    element._fadeTimeout = setTimeout(() => {
       if (element.parentNode === this.container) {
         this.container.removeChild(element);
       }
       this.labelElements.delete(poiId);
+      element._isFading = false;
+      element._fadeTimeout = null;
     }, 300);
   }
 
