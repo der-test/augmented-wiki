@@ -77,17 +77,19 @@ ngrok http 3000  # get public HTTPS URL for phone
   ```
 - All POIs must have name tags
 - Cache results for 5 minutes to minimize API calls
+- Use circular `around` query to fetch all surrounding POIs regardless of initial heading
 
 ### POI Coordinate System & Screen Projection
 - Store POI locations as WGS84 lat/lng (standard GPS format)
 - Use haversine formula for distance calculations
+- Use `allPOIs` passed to renderer without pre-filtering by FOV to allow 360-degree exploration
 - **Horizontal positioning**: Map azimuth difference (bearing - heading) to screen x-coordinate
   - Azimuth normalized to -180° to 180° range
   - Only show POIs within horizontal FOV (±30° by default, 60° total)
 - **Vertical positioning**: Distance-based linear distribution (NO altitude/pitch calculations)
-  - Close POIs (0m): 70% from top (lower screen)
-  - Far POIs (5000m): 20% from top (upper screen)
-  - Formula: `yPercent = 0.70 - (distance/5000) * 0.50`
+  - Close POIs (0m): 85% from top (lower screen)
+  - Far POIs (5000m): 10% from top (upper screen)
+  - Formula: `yPercent = 0.85 - (distance/5000) * 0.75`
 - **DO NOT use vertical FOV filtering** - causes POIs to disappear when tilting device
 
 ### Label Positioning & Rendering
@@ -160,6 +162,10 @@ ngrok http 3000  # get public HTTPS URL for phone
 5. **POIs disappear when tilting device**
    - **Cause**: Vertical FOV filtering removes POIs outside tilt range
    - **Fix**: Remove vertical FOV checks, only filter by horizontal FOV
+
+6. **iOS Safari Location Permissions**
+   - **Cause**: `watchPosition` may fail if chained after other async permission requests (like camera) due to loss of "user gesture" context.
+   - **Fix**: Use `Promise.all` to request Camera and Location permissions in parallel, ensuring both attach to the initial button click event. Use `getCurrentPosition` first to force the prompt.
 
 ### Performance Optimizations
 - Throttle POI fetches: 5s minimum interval + concurrent request prevention

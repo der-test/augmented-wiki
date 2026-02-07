@@ -281,6 +281,7 @@ export class OverlayRenderer {
 
   /**
    * Collision detection with vertical repositioning
+   * Uses a slot-search approach to find the nearest vertical space
    * @private
    * @param {Array} visiblePOIs - Array of { poiId, state }
    * @returns {Array} Array with adjusted positions to prevent overlaps
@@ -289,54 +290,65 @@ export class OverlayRenderer {
     const result = [];
     const occupiedRegions = [];
 
-    // Estimate label dimensions
-    const labelWidth = 220;
+    // Exact label dimensions from CSS/Main
+    const labelWidth = 220; 
     const labelHeight = 100;
-    const verticalOffset = labelHeight + this.minLabelSpacing;
+    // Small buffer for aesthetics
+    const padding = 10; 
+
+    // Search offsets: 0, +1, -1, +2, -2, etc. (multiples of height+padding)
+    // Checks ~8 slots up and down to find a fit
+    const offsets = [0];
+    for (let i = 1; i <= 8; i++) {
+        offsets.push(i);
+        offsets.push(-i);
+    }
+
+    const verticalStep = labelHeight + padding;
 
     for (const { poiId, state } of visiblePOIs) {
-      let pos = { ...state.screenPos };
-      let attempts = 0;
-      let hasCollision = true;
+      const originalPos = { ...state.screenPos };
+      let bestPos = null;
+      let foundSlot = false;
 
-      // Try to find non-overlapping position by adjusting vertically
-      while (hasCollision && attempts < 15) {
-        hasCollision = false;
-
-        for (const region of occupiedRegions) {
-          const dx = Math.abs(pos.x - region.x);
-          const dy = Math.abs(pos.y - region.y);
+      // Try each offset until we find a free spot
+      for (const k of offsets) {
+          const candidateY = originalPos.y + (k * verticalStep);
           
-          const horizontalOverlap = dx < (labelWidth / 2 + this.minLabelSpacing / 2);
-          const verticalOverlap = dy < (labelHeight / 2 + this.minLabelSpacing / 2);
-
-          if (horizontalOverlap && verticalOverlap) {
-            hasCollision = true;
-            // Alternate between shifting up and down to distribute labels
-            // Use attempt count to determine direction
-            if (attempts % 2 === 0) {
-              // Shift down
-              pos.y += verticalOffset;
-              if (pos.y > this.screenDimensions.height - labelHeight - 50) {
-                pos.y = this.screenDimensions.height - labelHeight - 50;
-              }
-            } else {
-              // Shift up
-              pos.y -= verticalOffset;
-              if (pos.y < 50) {
-                pos.y = 50;
-              }
-            }
-            break;
+          // Check screen bounds (with margin)
+          if (candidateY < 50 || candidateY > this.screenDimensions.height - labelHeight - 50) {
+              continue;
           }
-        }
-        attempts++;
+
+          // Check collision with already placed labels
+          let collision = false;
+          for (const region of occupiedRegions) {
+              const dx = Math.abs(originalPos.x - region.x);
+              const dy = Math.abs(candidateY - region.y);
+              
+              // Strict non-overlap check: distance between centers/tops < dimension + padding
+              if (dx < (labelWidth + padding) && dy < (labelHeight + padding)) {
+                  collision = true;
+                  break;
+              }
+          }
+
+          if (!collision) {
+              bestPos = { x: originalPos.x, y: candidateY };
+              foundSlot = true;
+              break;
+          }
       }
 
-      // Always add the POI, even if collision resolution failed (best effort)
-      state.screenPos = pos;
+      // If no slot found, force it inside bounds (overlapping is unavoidable here)
+      if (!foundSlot) {
+          let clampedY = Math.max(50, Math.min(originalPos.y, this.screenDimensions.height - labelHeight - 50));
+          bestPos = { x: originalPos.x, y: clampedY };
+      }
+
+      state.screenPos = bestPos;
       result.push({ poiId, state });
-      occupiedRegions.push({ x: pos.x, y: pos.y });
+      occupiedRegions.push(bestPos);
     }
 
     return result;

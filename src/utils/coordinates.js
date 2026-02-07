@@ -218,7 +218,7 @@ export function projectToScreen(
   
   // Debug occasionally
   if (Math.random() < 0.02) {
-    console.log(`Horizontal: heading=${heading.toFixed(1)}°, bearingToPOI=${bearingToPOI.toFixed(1)}°, azimuthDiff=${azimuthDiff.toFixed(1)}°, x=${x.toFixed(0)}px (screen center=${screenWidth/2})`);
+    console.log(`Horizontal: heading=${deviceHeading.toFixed(1)}°, bearingToPOI=${bearingToPOI.toFixed(1)}°, azimuthDiff=${azimuthDiff.toFixed(1)}°, x=${x.toFixed(0)}px (screen center=${screenWidth/2})`);
   }
   
   // Vertical position: Distribute across screen height based on distance
@@ -230,9 +230,9 @@ export function projectToScreen(
   const effectiveMaxDistance = 5000; // 5km typical max for AR visibility
   const normalizedDistance = Math.min(distance / effectiveMaxDistance, 1.0);
   
-  // Map to screen: 0m->70%, 5km->20% (broader distribution with middle focus)
-  // This spreads POIs from 20% to 70% of screen height (50% of total height)
-  const yPercent = 0.70 - (normalizedDistance * 0.50);
+  // Map to screen: 0m->85%, 5km->10% (Using more vertical screen space)
+  // This spreads POIs from 10% to 85% of screen height (75% of total height)
+  const yPercent = 0.85 - (normalizedDistance * 0.75);
   
   const y = screenHeight * yPercent;
   

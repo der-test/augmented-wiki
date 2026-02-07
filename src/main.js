@@ -94,11 +94,12 @@ class AugmentedWikiApp {
             this.elements.startBtn.disabled = true;
             this.elements.startBtn.textContent = 'Starting...';
 
-            // Step 1: Request camera permission
-            await this.cameraStream.start(this.elements.camera);
-
-            // Step 2: Request location permission and start tracking
-            await this.geolocator.start();
+            // Request Camera and Location in parallel to ensure both attach to the user gesture event
+            // iOS Safari is strict about this - chaining them with await causes the second one to lose context
+            await Promise.all([
+                this.geolocator.start(), // Start location first (often stricter)
+                this.cameraStream.start(this.elements.camera)
+            ]);
 
             // Step 3: Show calibration screen
             this.showScreen('calibration');
@@ -128,10 +129,10 @@ class AugmentedWikiApp {
 
             this.overlayRenderer = new OverlayRenderer(this.elements.arOverlay, {
                 maxVisibleDistance: this.maxDistance,
-                maxLabels: 15,
-                minLabelSpacing: 100,
+                maxLabels: 30, // Increased from 15 to show more POIs
+                minLabelSpacing: 100, // Reduced from 100 (or keep same, need space)
                 horizontalFOV: fov,
-                screenWidth: window.innerWidth,
+                screenWidth: window.innerWidth, // Initialize with current dimensions
                 screenHeight: window.innerHeight,
                 onLabelClick: (poi, article) => {
                     if (article && article.url) {
@@ -239,17 +240,23 @@ class AugmentedWikiApp {
             // const visiblePOIs = allPOIs;
             
             // Filter visible POIs
+            // WE DO NOT FILTER HERE anymore - passing all loaded POIs to the renderer
+            // The renderer handles real-time FOV culling as the user turns
+            // This ensures POIs appear immediately when turning without needing a new fetch
+            /* 
             const visiblePOIs = this.poiDetector.getVisiblePOIs(
                 allPOIs,
                 position,
                 orientation.heading,
                 orientation.pitch,
-                90, // 90° horizontal FOV - shows POIs in front and to sides
-                90, // Vertical FOV (not used in filtering anymore)
+                90, // 90° horizontal FOV
+                90, // Vertical FOV
                 this.maxDistance
             );
+            */
+            const visiblePOIs = allPOIs;
 
-            console.log(`${visiblePOIs.length} POIs visible in current view`);
+            console.log(`${visiblePOIs.length} POIs passed to renderer (full circle)`);
             
             // Debug: show first few POIs with their bearings
             if (allPOIs.length > 0) {
@@ -328,6 +335,13 @@ class AugmentedWikiApp {
         // Update overlay renderer if active
         if (this.overlayRenderer) {
             this.overlayRenderer.updateMaxDistance(this.maxDistance);
+
+             // If distance is maxed out (10km), allow more labels
+             if (this.maxDistance >= 10000) {
+                this.overlayRenderer.maxLabels = 50; 
+            } else {
+                this.overlayRenderer.maxLabels = 30;
+            }
         }
         
         // Refresh POIs with new distance

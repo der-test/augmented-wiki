@@ -111,27 +111,30 @@ export class Geolocator {
 
     /**
      * Start GPS position tracking
+     * Uses getCurrentPosition first to ensure permissions and initial fix,
+     * then switches to watchPosition for updates. This is more robust on iOS.
      * @private
      */
     _startPositionTracking() {
         return new Promise((resolve, reject) => {
             const options = {
                 enableHighAccuracy: true,
-                timeout: 10000,
+                timeout: 20000, // Increased timeout for GPS lock
                 maximumAge: 0
             };
 
-            this.positionWatchId = navigator.geolocation.watchPosition(
+            // Use getCurrentPosition first to trigger permission prompt reliably
+            navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    this.position = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude,
-                        accuracy: position.coords.accuracy,
-                        altitude: position.coords.altitude,
-                        timestamp: position.timestamp
-                    };
-
-                    this._emit('position', this.position);
+                    this._handlePositionSuccess(position);
+                    
+                    // Start watching for continuous updates
+                    this.positionWatchId = navigator.geolocation.watchPosition(
+                        (pos) => this._handlePositionSuccess(pos),
+                        (err) => console.warn('Position watch error:', err),
+                        options
+                    );
+                    
                     resolve();
                 },
                 (error) => {
@@ -142,6 +145,22 @@ export class Geolocator {
                 options
             );
         });
+    }
+
+    /**
+     * Process separate position update
+     * @private
+     */
+    _handlePositionSuccess(position) {
+        this.position = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            altitude: position.coords.altitude,
+            timestamp: position.timestamp
+        };
+
+        this._emit('position', this.position);
     }
 
     /**
@@ -182,10 +201,22 @@ export class Geolocator {
      * @private
      */
     _handleOrientation(event) {
-        if (event.alpha === null) return;
+        let heading = null;
+
+        // Priority 1: iOS webkitCompassHeading (Clockwise, 0=North)
+        if (typeof event.webkitCompassHeading === 'number') {
+            heading = event.webkitCompassHeading;
+        } 
+        // Priority 2: Standard alpha (Counter-Clockwise, 0=North)
+        // Must convert to Clockwise to match map bearing system
+        else if (event.alpha !== null) {
+            heading = 360 - event.alpha;
+        }
+
+        if (heading === null) return;
 
         const rawOrientation = {
-            alpha: event.alpha,  // Compass heading (0-360)
+            alpha: heading,      // Normalized to Clockwise 0-360
             beta: event.beta,    // Front-back tilt (-180 to 180)
             gamma: event.gamma   // Left-right tilt (-90 to 90)
         };
@@ -203,7 +234,7 @@ export class Geolocator {
     _getPositionErrorMessage(error) {
         switch (error.code) {
             case error.PERMISSION_DENIED:
-                return 'Location permission denied. Please enable location access.';
+                return 'Location permission denied. Please reset permissions in Settings (Privacy > Location Services) or reload.';
             case error.POSITION_UNAVAILABLE:
                 return 'Location unavailable. Please check your GPS settings.';
             case error.TIMEOUT:
