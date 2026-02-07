@@ -99,14 +99,12 @@ class AugmentedWikiApp {
 
     /**
      * Start the application
-     * Only requests location here. Camera + orientation are requested on the
-     * calibration button so each iOS Safari user gesture triggers at most one
-     * native permission prompt (Safari silently blocks the second prompt when
-     * two are initiated from the same gesture).
+     * Requests both camera and location in parallel to preserve user gesture context for iOS Safari.
+     * iOS Safari loses gesture context if permissions are chained sequentially.
      */
     start() {
         this.elements.startBtn.disabled = true;
-        this.elements.startBtn.textContent = 'Requesting Location...';
+        this.elements.startBtn.textContent = 'Requesting Permissions...';
 
         // Geolocation requires HTTPS (secure context)
         if (!window.isSecureContext) {
@@ -124,49 +122,53 @@ class AugmentedWikiApp {
             maximumAge: 0
         };
 
-        // Call getCurrentPosition directly in the click handler so the call
-        // is registered synchronously within the user gesture context.
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                // Location granted — initialise geolocator with this fix
-                this.geolocator.startWithPosition(position)
-                    .then(() => {
-                        this.showScreen('calibration');
-                    })
-                    .catch((error) => {
-                        console.error('Geolocator start error:', error);
-                        this.showError(error.message);
-                        this.elements.startBtn.disabled = false;
-                        this.elements.startBtn.textContent = 'Start';
-                    });
-            },
-            (error) => {
-                console.error('Geolocation error:', error);
-                const message = this.geolocator.getPositionErrorMessage(error);
-                this.showError(message);
-                this.elements.startBtn.disabled = false;
-                this.elements.startBtn.textContent = 'Start';
-            },
-            initialOptions
-        );
+        // Request camera and location in PARALLEL using Promise.all
+        // This ensures both permission requests attach to the same user gesture
+        // context, preventing iOS Safari from silently denying the second request.
+        Promise.all([
+            // Location promise
+            new Promise((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(
+                    resolve,
+                    reject,
+                    initialOptions
+                );
+            }),
+            // Camera promise
+            this.cameraStream.start(this.elements.camera)
+        ])
+        .then(([position]) => {
+            // Both permissions granted - initialize geolocator with acquired position
+            return this.geolocator.startWithPosition(position);
+        })
+        .then(() => {
+            this.showScreen('calibration');
+        })
+        .catch((error) => {
+            console.error('Permission error:', error);
+            let message;
+            if (error.code !== undefined) {
+                // Geolocation error
+                message = this.geolocator.getPositionErrorMessage(error);
+            } else {
+                // Camera or other error
+                message = error.message || 'Failed to access camera or location';
+            }
+            this.showError(message);
+            this.elements.startBtn.disabled = false;
+            this.elements.startBtn.textContent = 'Start';
+        });
     }
 
     /**
      * Finish calibration and start AR
-     * Requests camera + orientation permissions here (from the calibration
-     * button gesture) so iOS Safari can show each prompt reliably.
+     * Requests orientation permission (camera and location already granted in start())
      */
     async finishCalibration() {
         try {
-            // Request camera permission from this user gesture.
-            // On iOS Safari, getUserMedia must be called during a user gesture.
-            // We deliberately do this here (not in start()) so that the Start
-            // button gesture is reserved for the location prompt only.
-            this.elements.calibrationDoneBtn.disabled = true;
-            this.elements.calibrationDoneBtn.textContent = 'Requesting Camera...';
-            await this.cameraStream.start(this.elements.camera);
-
+            // Camera already started in parallel with location during start()
             // Request orientation permission (iOS 13+ requires user gesture)
+            this.elements.calibrationDoneBtn.disabled = true;
             this.elements.calibrationDoneBtn.textContent = 'Requesting Sensors...';
             const orientationGranted = await this.geolocator.requestOrientationPermission();
             if (!orientationGranted) {
