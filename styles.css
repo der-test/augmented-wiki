@@ -186,6 +186,51 @@ button:active {
     background: rgba(255, 255, 255, 0.2);
 }
 
+/* Error Modal */
+#error-modal {
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.9);
+}
+#error-modal .error-content {
+    max-width: 340px;
+    padding: 24px;
+    background: #1a1a2e;
+    border-radius: 16px;
+    text-align: center;
+}
+#error-modal h2 {
+    margin: 0 0 12px;
+    font-size: 1.3em;
+}
+#error-modal #error-message {
+    font-size: 0.95em;
+    margin: 0 0 12px;
+    color: #e0e0e0;
+}
+#error-modal .error-help {
+    text-align: left;
+    font-size: 0.85em;
+    color: #ccc;
+    margin: 0 0 16px;
+    line-height: 1.6;
+}
+#error-modal .error-help ol {
+    margin: 6px 0 0 0;
+    padding-left: 20px;
+}
+#error-modal #error-dismiss-btn {
+    padding: 12px 32px;
+    font-size: 1em;
+    border: none;
+    border-radius: 8px;
+    background: #6366f1;
+    color: white;
+    cursor: pointer;
+}
+
 /* Debug Panel */
 .debug-panel {
     position: absolute;
