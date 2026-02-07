@@ -372,7 +372,7 @@ export class OverlayRenderer {
     }
 
     // Create or update labels for visible POIs
-    for (const { poiId, state } of displayPOIs) {
+    displayPOIs.forEach(({ poiId, state }, index) => {
       let element = this.labelElements.get(poiId);
 
       if (!element) {
@@ -391,15 +391,19 @@ export class OverlayRenderer {
         }
       }
 
+      // Calculate Z-Index: Closest (index 0) gets highest value
+      // Base at 100 to stay above video but below UI
+      const zIndex = 1000 + (displayPOIs.length - index);
+
       // Update position with smooth interpolation
-      this._updateLabelPosition(element, state);
+      this._updateLabelPosition(element, state, zIndex);
       
       // Update content if article data arrived
       if (state.articleData && !element.dataset.hasArticle) {
         this._updateLabelContent(element, state);
         element.dataset.hasArticle = 'true';
       }
-    }
+    });
   }
 
   /**
@@ -469,8 +473,9 @@ export class OverlayRenderer {
    * @private
    * @param {HTMLElement} element - Label element
    * @param {Object} state - POI state
+   * @param {number} zIndex - Z-index for layering
    */
-  _updateLabelPosition(element, state) {
+  _updateLabelPosition(element, state, zIndex) {
     const pos = state.screenPos;
     
     // Direct positioning - set left/top with translate to center
@@ -478,6 +483,7 @@ export class OverlayRenderer {
     element.style.left = `${pos.x}px`;
     element.style.top = `${pos.y}px`;
     element.style.transform = `translate(-50%, 0)`; // Center horizontally only
+    element.style.zIndex = zIndex;
   }
 
   /**
