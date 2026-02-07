@@ -22,7 +22,7 @@ export class OverlayRenderer {
     this.minLabelSpacing = options.minLabelSpacing || 80; // pixels
     this.horizontalFOV = options.horizontalFOV || 60; // degrees
     this.verticalFOV = options.verticalFOV || 45; // degrees
-    this.updateInterval = options.updateInterval || 100; // ms
+    this.updateInterval = options.updateInterval || 50; // ms - faster updates for responsive tracking
     
     // State management
     this.activePOIs = new Map(); // Map<poiId, POIState>
@@ -251,15 +251,17 @@ export class OverlayRenderer {
     }
 
     // Debug log occasionally
-    if (Math.random() < 0.05) { // 5% of frames
-      console.log(`Render: ${visiblePOIs.length} visible / ${projectionAttempts} total (${outsideHFOV} outside FOV), heading: ${this.deviceOrientation.heading.toFixed(1)}°`);
+    if (Math.random() < 0.1) { // 10% of frames for more frequent feedback
+      console.log(`[AR Render] ${visiblePOIs.length} visible / ${projectionAttempts} total (${outsideHFOV} outside FOV)`);
+      console.log(`[AR State] Heading: ${this.deviceOrientation.heading.toFixed(1)}°, User: ${this.userPosition.lat.toFixed(4)}, ${this.userPosition.lng.toFixed(4)}`);
       
       // Log detailed position info for visible POIs
       if (visiblePOIs.length > 0) {
-        const sample = visiblePOIs.slice(0, 3);
+        const sample = visiblePOIs.slice(0, 2);
         sample.forEach(({state}) => {
+          const xPercent = (state.screenPos.x / this.screenDimensions.width * 100).toFixed(0);
           const yPercent = (state.screenPos.y / this.screenDimensions.height * 100).toFixed(0);
-          console.log(`  - ${state.poi.name}: ${state.poi.distance.toFixed(0)}m, y=${state.screenPos.y}px (${yPercent}% from top)`);
+          console.log(`  [POI] ${state.poi.name}: bearing=${state.poi.bearing.toFixed(0)}°, x=${state.screenPos.x}px (${xPercent}%), y=${state.screenPos.y}px (${yPercent}%)`);
         });
       }
     }
@@ -349,10 +351,12 @@ export class OverlayRenderer {
    */
   _updateDOM(displayPOIs) {
     const displayPOIIds = new Set(displayPOIs.map(p => p.poiId));
+    const allActivePOIIds = new Set(this.activePOIs.keys());
 
-    // Fade out and remove labels that should no longer be visible
+    // Remove labels for POIs that are no longer active OR visible
     for (const [poiId, element] of this.labelElements) {
-      if (!displayPOIIds.has(poiId)) {
+      const shouldRemove = !displayPOIIds.has(poiId) || !allActivePOIIds.has(poiId);
+      if (shouldRemove) {
         this._fadeOutLabel(poiId, element);
       }
     }
@@ -418,7 +422,7 @@ export class OverlayRenderer {
       border: 1px solid rgba(255, 255, 255, 0.2);
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
       max-width: 200px;
-      z-index: 1000;
+      z-index: 5;
     `;
 
     // Initial content (name and distance)
@@ -459,9 +463,11 @@ export class OverlayRenderer {
   _updateLabelPosition(element, state) {
     const pos = state.screenPos;
     
-    // Use CSS3D transform for hardware acceleration
+    // Direct positioning - set left/top with translate to center
+    // This ensures position updates are immediately visible
     element.style.left = `${pos.x}px`;
     element.style.top = `${pos.y}px`;
+    element.style.transform = `translate(-50%, 0)`; // Center horizontally only
   }
 
   /**

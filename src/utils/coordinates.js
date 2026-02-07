@@ -212,7 +212,14 @@ export function projectToScreen(
   // Center of screen is (screenWidth/2, screenHeight/2)
   
   // Horizontal position: map azimuthDiff from [-halfHFOV, +halfHFOV] to [0, screenWidth]
-  const x = (screenWidth / 2) + (azimuthDiff / horizontalFOV) * screenWidth;
+  // azimuthDiff is in degrees, normalize to percentage of FOV, then map to screen
+  const normalizedHorizontal = azimuthDiff / horizontalFOV; // -0.5 to 0.5 for full FOV
+  const x = (screenWidth / 2) + (normalizedHorizontal * screenWidth);
+  
+  // Debug occasionally
+  if (Math.random() < 0.02) {
+    console.log(`Horizontal: heading=${heading.toFixed(1)}°, bearingToPOI=${bearingToPOI.toFixed(1)}°, azimuthDiff=${azimuthDiff.toFixed(1)}°, x=${x.toFixed(0)}px (screen center=${screenWidth/2})`);
+  }
   
   // Vertical position: Distribute across screen height based on distance
   // Use actual distance range for better distribution
