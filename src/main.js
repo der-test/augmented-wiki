@@ -103,14 +103,30 @@ class AugmentedWikiApp {
     async start() {
         try {
             this.elements.startBtn.disabled = true;
-            this.elements.startBtn.textContent = 'Starting...';
+            this.elements.startBtn.textContent = 'Requesting Location...';
+            
+            // On iOS Safari, we cannot request both permissions at once or getting one might invalidate the gesture for the other.
+            // Strict sequential order with informative UI updates seems to be the only reliable way.
+            
+            // 1. request Location (often the most problematic if ignored)
+            try {
+                await this.geolocator.start();
+            } catch (geoError) {
+                console.warn("Location start failed first attempt:", geoError);
+                // If denied, we throw to stop the chain
+                throw geoError;
+            }
 
-            // Request Camera and Location in parallel to ensure both attach to the user gesture event
-            // iOS Safari is strict about this - chaining them with await causes the second one to lose context
-            await Promise.all([
-                this.geolocator.start(), // Start location first (often stricter)
-                this.cameraStream.start(this.elements.camera)
-            ]);
+            // 2. Request Camera
+            this.elements.startBtn.textContent = 'Requesting Camera...';
+            try {
+                await this.cameraStream.start(this.elements.camera);
+            } catch (cameraError) {
+                // If camera fails (e.g. gesture lost), we might need to ask user to click again.
+                // For now, let's treat it as fatal but log it
+                console.error("Camera denied or failed:", cameraError);
+                throw new Error("Camera permission failed. Please reload and try again.");
+            }
 
             // Step 3: Show calibration screen
             this.showScreen('calibration');
@@ -157,7 +173,8 @@ class AugmentedWikiApp {
             this.geolocator.on('position', (position) => {
                 positionUpdateCount++;
                 
-                this.elements.gpsStatus.textContent = '📍 ' + position.accuracy.toFixed(0) + 'm';
+                // Keep status bar simple (icon removed as requested)
+                this.elements.gpsStatus.textContent = ''; 
                 this.overlayRenderer.updateUserPosition(position);
                 
                 // Only update POIs on first position, then rely on manual triggers
@@ -166,8 +183,8 @@ class AugmentedWikiApp {
                     this.updatePOIs();
                 }
                 
-                // Update debug info
-                this.elements.debugAccuracy.textContent = position.accuracy.toFixed(1) + 'm';
+                // Update debug info with accuracy (HTML already has 'm' unit)
+                this.elements.debugAccuracy.textContent = position.accuracy.toFixed(1);
             });
 
             this.geolocator.on('orientation', (orientation) => {
@@ -473,6 +490,10 @@ class AugmentedWikiApp {
         document.querySelectorAll('.screen').forEach(el => {
             el.classList.remove('active');
         });
+        
+        // Hide AR controls by default
+        const arControls = document.getElementById('ar-controls');
+        if (arControls) arControls.style.display = 'none';
 
         // Show requested screen
         switch (screen) {
@@ -489,6 +510,7 @@ class AugmentedWikiApp {
                 this.elements.settingsScreen.classList.add('active');
                 break;
             case 'ar':
+                if (arControls) arControls.style.display = 'block';
                 // AR view has no overlay screen - just camera and overlays
                 break;
         }
