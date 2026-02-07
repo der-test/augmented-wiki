@@ -100,43 +100,28 @@ class AugmentedWikiApp {
     /**
      * Start the application
      */
-    async start() {
-        try {
-            this.elements.startBtn.disabled = true;
-            this.elements.startBtn.textContent = 'Requesting Location...';
-            
-            // On iOS Safari, we cannot request both permissions at once or getting one might invalidate the gesture for the other.
-            // Strict sequential order with informative UI updates seems to be the only reliable way.
-            
-            // 1. request Location (often the most problematic if ignored)
-            try {
-                await this.geolocator.start();
-            } catch (geoError) {
-                console.warn("Location start failed first attempt:", geoError);
-                // If denied, we throw to stop the chain
-                throw geoError;
-            }
-
-            // 2. Request Camera
-            this.elements.startBtn.textContent = 'Requesting Camera...';
-            try {
-                await this.cameraStream.start(this.elements.camera);
-            } catch (cameraError) {
-                // If camera fails (e.g. gesture lost), we might need to ask user to click again.
-                // For now, let's treat it as fatal but log it
-                console.error("Camera denied or failed:", cameraError);
-                throw new Error("Camera permission failed. Please reload and try again.");
-            }
-
-            // Step 3: Show calibration screen
-            this.showScreen('calibration');
-
-        } catch (error) {
-            console.error('Startup error:', error);
-            this.showError(error.message);
-            this.elements.startBtn.disabled = false;
-            this.elements.startBtn.textContent = 'Start';
-        }
+    start() {
+        this.elements.startBtn.disabled = true;
+        this.elements.startBtn.textContent = 'Requesting Location...';
+        
+        // On iOS Safari, the geolocation prompt must be triggered directly from the user gesture.
+        // Avoid async/await here to preserve gesture context.
+        this.geolocator.start()
+            .then(() => {
+                // 2. Request Camera
+                this.elements.startBtn.textContent = 'Requesting Camera...';
+                return this.cameraStream.start(this.elements.camera);
+            })
+            .then(() => {
+                // Step 3: Show calibration screen
+                this.showScreen('calibration');
+            })
+            .catch((error) => {
+                console.error('Startup error:', error);
+                this.showError(error.message);
+                this.elements.startBtn.disabled = false;
+                this.elements.startBtn.textContent = 'Start';
+            });
     }
 
     /**

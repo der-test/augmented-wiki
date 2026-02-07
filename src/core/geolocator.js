@@ -37,23 +37,27 @@ export class Geolocator {
      * Start tracking position and orientation
      * @returns {Promise<void>}
      */
-    async start() {
-        if (this.isTracking) return;
+    start() {
+        if (this.isTracking) return Promise.resolve();
 
         const support = Geolocator.checkSupport();
+        if (!window.isSecureContext) {
+            return Promise.reject(new Error('Location requires HTTPS. On iOS, trust the mkcert certificate in Settings > General > About > Certificate Trust Settings.'));
+        }
         
         if (!support.geolocation) {
-            throw new Error('Geolocation not supported');
+            return Promise.reject(new Error('Geolocation not supported'));
         }
         if (!support.orientation) {
-            throw new Error('Device orientation not supported');
+            return Promise.reject(new Error('Device orientation not supported'));
         }
 
-        // Request permissions and start tracking
-        await this._startPositionTracking();
-        await this._startOrientationTracking();
-
-        this.isTracking = true;
+        // Request permissions and start tracking (no async/await to preserve gesture context)
+        return this._startPositionTracking()
+            .then(() => this._startOrientationTracking())
+            .then(() => {
+                this.isTracking = true;
+            });
     }
 
     /**
@@ -117,9 +121,17 @@ export class Geolocator {
      */
     _startPositionTracking() {
         return new Promise((resolve, reject) => {
-            const options = {
+            // Initial check: Low accuracy, accept cached.
+            // This is primarily to trigger the Permission Prompt quickly and robustly.
+            const initialOptions = {
+                enableHighAccuracy: false,
+                timeout: 30000,
+                maximumAge: 0
+            };
+
+            const watchOptions = {
                 enableHighAccuracy: true,
-                timeout: 20000, // Increased timeout for GPS lock
+                timeout: 20000,
                 maximumAge: 0
             };
 
@@ -128,11 +140,11 @@ export class Geolocator {
                 (position) => {
                     this._handlePositionSuccess(position);
                     
-                    // Start watching for continuous updates
+                    // Permission granted! Now switch to high-accuracy watch
                     this.positionWatchId = navigator.geolocation.watchPosition(
                         (pos) => this._handlePositionSuccess(pos),
                         (err) => console.warn('Position watch error:', err),
-                        options
+                        watchOptions
                     );
                     
                     resolve();
@@ -142,7 +154,7 @@ export class Geolocator {
                     this._emit('error', { type: 'position', message: errorMessage });
                     reject(new Error(errorMessage));
                 },
-                options
+                initialOptions
             );
         });
     }
@@ -234,13 +246,13 @@ export class Geolocator {
     _getPositionErrorMessage(error) {
         switch (error.code) {
             case error.PERMISSION_DENIED:
-                return 'Location permission denied. Please reset permissions in Settings (Privacy > Location Services) or reload.';
+                return 'Location denied. iOS: Settings > Privacy > Location Services. Enable for this site.';
             case error.POSITION_UNAVAILABLE:
-                return 'Location unavailable. Please check your GPS settings.';
+                return 'Location unavailable. Check GPS.';
             case error.TIMEOUT:
-                return 'Location request timeout. Please try again.';
+                return 'Location timeout. Retry.';
             default:
-                return 'Location error: ' + error.message;
+                return 'Loc error: ' + error.message;
         }
     }
 
