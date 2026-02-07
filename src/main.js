@@ -121,61 +121,68 @@ class AugmentedWikiApp {
 
         console.log('[AugmentedWiki] start() called, secure context:', window.isSecureContext, 'protocol:', location.protocol);
 
-        // Try Permissions API to detect cached denial before triggering geolocation
-        // (Safari 16+ supports this; older browsers skip to direct geolocation call)
-        const permCheck = (navigator.permissions && navigator.permissions.query)
-            ? navigator.permissions.query({ name: 'geolocation' }).catch(() => null)
-            : Promise.resolve(null);
+        // IMPORTANT: iOS Safari requires getCurrentPosition to be called
+        // synchronously from the user gesture (click) handler. Any async
+        // wrapper (Promise.then, await, setTimeout) breaks the gesture
+        // context and Safari silently denies the request without showing
+        // a prompt. Therefore we call getCurrentPosition FIRST, directly,
+        // and run the Permissions API check in parallel as a non-blocking
+        // optimisation for cached denials.
+        let handled = false;
 
-        permCheck.then((permStatus) => {
-            if (permStatus) {
-                console.log('[AugmentedWiki] Permissions API state:', permStatus.state);
-            } else {
-                console.log('[AugmentedWiki] Permissions API not available, calling geolocation directly');
-            }
-
-            // If Permissions API reports 'denied', skip the geolocation call entirely
-            // and show reset instructions immediately
-            if (permStatus && permStatus.state === 'denied') {
-                console.warn('[AugmentedWiki] Location permission is denied (cached). Showing reset instructions.');
-                this._handleLocationDenied();
-                return;
-            }
-
-            // Call getCurrentPosition directly in the gesture context
-            console.log('[AugmentedWiki] Calling getCurrentPosition...');
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    console.log('[AugmentedWiki] Got position:', position.coords.latitude, position.coords.longitude);
-                    this.geolocator.startWithPosition(position)
-                        .then(() => {
-                            this.elements.startBtn.textContent = 'Requesting Camera...';
-                            return this.cameraStream.start(this.elements.camera);
-                        })
-                        .then(() => {
-                            this.showScreen('calibration');
-                        })
-                        .catch((error) => {
-                            console.error('[AugmentedWiki] Startup error:', error);
-                            this.showError(error.message);
-                            this.elements.startBtn.disabled = false;
-                            this.elements.startBtn.textContent = 'Start';
-                        });
-                },
-                (error) => {
-                    console.error('[AugmentedWiki] Geolocation error - code:', error.code, 'message:', error.message);
-                    if (error.code === 1) {
+        // Non-blocking: check Permissions API in parallel to detect
+        // cached denials and show helpful reset instructions faster.
+        if (navigator.permissions && navigator.permissions.query) {
+            navigator.permissions.query({ name: 'geolocation' })
+                .then((permStatus) => {
+                    console.log('[AugmentedWiki] Permissions API state:', permStatus.state);
+                    if (!handled && permStatus.state === 'denied') {
+                        handled = true;
+                        console.warn('[AugmentedWiki] Location permission is denied (cached).');
                         this._handleLocationDenied();
-                    } else {
-                        const msg = this.geolocator.getPositionErrorMessage(error);
-                        this.showError(msg);
+                    }
+                })
+                .catch(() => {});
+        }
+
+        // Call getCurrentPosition synchronously in the click handler
+        // so iOS Safari recognises the user gesture context.
+        console.log('[AugmentedWiki] Calling getCurrentPosition...');
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                if (handled) return;
+                handled = true;
+                console.log('[AugmentedWiki] Got position:', position.coords.latitude, position.coords.longitude);
+                this.geolocator.startWithPosition(position)
+                    .then(() => {
+                        this.elements.startBtn.textContent = 'Requesting Camera...';
+                        return this.cameraStream.start(this.elements.camera);
+                    })
+                    .then(() => {
+                        this.showScreen('calibration');
+                    })
+                    .catch((error) => {
+                        console.error('[AugmentedWiki] Startup error:', error);
+                        this.showError(error.message);
                         this.elements.startBtn.disabled = false;
                         this.elements.startBtn.textContent = 'Start';
-                    }
-                },
-                { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
-            );
-        });
+                    });
+            },
+            (error) => {
+                if (handled) return;
+                handled = true;
+                console.error('[AugmentedWiki] Geolocation error - code:', error.code, 'message:', error.message);
+                if (error.code === 1) {
+                    this._handleLocationDenied();
+                } else {
+                    const msg = this.geolocator.getPositionErrorMessage(error);
+                    this.showError(msg);
+                    this.elements.startBtn.disabled = false;
+                    this.elements.startBtn.textContent = 'Start';
+                }
+            },
+            { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
+        );
     }
 
     /**
