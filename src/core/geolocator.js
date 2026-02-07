@@ -41,9 +41,6 @@ export class Geolocator {
         if (this.isTracking) return Promise.resolve();
 
         const support = Geolocator.checkSupport();
-        if (!window.isSecureContext) {
-            return Promise.reject(new Error('Location requires HTTPS. On iOS, trust the mkcert certificate in Settings > General > About > Certificate Trust Settings.'));
-        }
         
         if (!support.geolocation) {
             return Promise.reject(new Error('Geolocation not supported'));
@@ -55,6 +52,47 @@ export class Geolocator {
         // Request permissions and start tracking (no async/await to preserve gesture context)
         return this._startPositionTracking()
             .then(() => this._startOrientationTracking())
+            .then(() => {
+                this.isTracking = true;
+            });
+    }
+
+    /**
+     * Start tracking using an already-acquired position
+     * Useful when the initial permission prompt must be triggered in a click handler.
+     * @param {GeolocationPosition} position
+     * @returns {Promise<void>}
+     */
+    startWithPosition(position) {
+        if (this.isTracking) return Promise.resolve();
+
+        const support = Geolocator.checkSupport();
+        
+        if (!support.geolocation) {
+            return Promise.reject(new Error('Geolocation not supported'));
+        }
+        if (!support.orientation) {
+            return Promise.reject(new Error('Device orientation not supported'));
+        }
+        if (!position || !position.coords) {
+            return Promise.reject(new Error('Invalid initial position'));
+        }
+
+        this._handlePositionSuccess(position);
+
+        const watchOptions = {
+            enableHighAccuracy: true,
+            timeout: 20000,
+            maximumAge: 0
+        };
+
+        this.positionWatchId = navigator.geolocation.watchPosition(
+            (pos) => this._handlePositionSuccess(pos),
+            (err) => console.warn('Position watch error:', err),
+            watchOptions
+        );
+
+        return this._startOrientationTracking()
             .then(() => {
                 this.isTracking = true;
             });
@@ -246,7 +284,7 @@ export class Geolocator {
     _getPositionErrorMessage(error) {
         switch (error.code) {
             case error.PERMISSION_DENIED:
-                return 'Location denied. iOS: Settings > Privacy > Location Services. Enable for this site.';
+                return 'Location access denied. Please allow location access for this site in your browser settings, then reload.';
             case error.POSITION_UNAVAILABLE:
                 return 'Location unavailable. Check GPS.';
             case error.TIMEOUT:
@@ -254,6 +292,15 @@ export class Geolocator {
             default:
                 return 'Loc error: ' + error.message;
         }
+    }
+
+    /**
+     * Public wrapper for position error messaging
+     * @param {GeolocationPositionError} error
+     * @returns {string}
+     */
+    getPositionErrorMessage(error) {
+        return this._getPositionErrorMessage(error);
     }
 
     /**

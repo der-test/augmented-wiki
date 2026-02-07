@@ -103,25 +103,51 @@ class AugmentedWikiApp {
     start() {
         this.elements.startBtn.disabled = true;
         this.elements.startBtn.textContent = 'Requesting Location...';
+
+        // Geolocation requires HTTPS (secure context)
+        if (!window.isSecureContext) {
+            this.showError('This app requires HTTPS. Please visit: https://' + location.host + location.pathname);
+            this.elements.startBtn.disabled = false;
+            this.elements.startBtn.textContent = 'Start';
+            return;
+        }
+
+        const initialOptions = {
+            enableHighAccuracy: false,
+            timeout: 30000,
+            maximumAge: 0
+        };
         
         // On iOS Safari, the geolocation prompt must be triggered directly from the user gesture.
-        // Avoid async/await here to preserve gesture context.
-        this.geolocator.start()
-            .then(() => {
-                // 2. Request Camera
-                this.elements.startBtn.textContent = 'Requesting Camera...';
-                return this.cameraStream.start(this.elements.camera);
-            })
-            .then(() => {
-                // Step 3: Show calibration screen
-                this.showScreen('calibration');
-            })
-            .catch((error) => {
-                console.error('Startup error:', error);
-                this.showError(error.message);
+        // Call getCurrentPosition in the click handler to preserve gesture context.
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                this.geolocator.startWithPosition(position)
+                    .then(() => {
+                        // 2. Request Camera
+                        this.elements.startBtn.textContent = 'Requesting Camera...';
+                        return this.cameraStream.start(this.elements.camera);
+                    })
+                    .then(() => {
+                        // Step 3: Show calibration screen
+                        this.showScreen('calibration');
+                    })
+                    .catch((error) => {
+                        console.error('Startup error:', error);
+                        this.showError(error.message);
+                        this.elements.startBtn.disabled = false;
+                        this.elements.startBtn.textContent = 'Start';
+                    });
+            },
+            (error) => {
+                const message = this.geolocator.getPositionErrorMessage(error);
+                console.error('Geolocation error:', error);
+                this.showError(message);
                 this.elements.startBtn.disabled = false;
                 this.elements.startBtn.textContent = 'Start';
-            });
+            },
+            initialOptions
+        );
     }
 
     /**
