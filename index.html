@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Augmented Wiki</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Camera feed -->
+        <video id="camera" autoplay playsinline></video>
+        
+        <!-- AR overlay container -->
+        <div id="ar-overlay"></div>
+        
+        <!-- Permission/calibration screens -->
+        <div id="permission-screen" class="screen active">
+            <h1>Augmented Wiki</h1>
+            <p>Point your camera at landmarks to see Wikipedia articles</p>
+            <button id="start-btn">Start</button>
+        </div>
+        
+        <div id="calibration-screen" class="screen">
+            <h2>Calibrate Compass</h2>
+            <p>Move your phone in a figure-8 pattern to calibrate</p>
+            <p class="note">Next step will request motion sensors permission</p>
+            <div class="compass-icon">🧭</div>
+            <button id="calibration-done">Enable Sensors &amp; Continue</button>
+        </div>
+        
+        <!-- Status bar -->
+        <div id="status-bar">
+            <span id="gps-status">📍</span>
+            <span id="poi-count">0 POIs</span>
+            <button id="settings-btn" class="icon-btn">⚙️</button>
+        </div>
+        
+        <!-- Settings screen -->
+        <div id="settings-screen" class="screen">
+            <h2>Settings</h2>
+            
+            <div class="setting-group">
+                <label for="distance-slider">
+                    Maximum POI Distance: <span id="distance-value">5.0</span> km
+                </label>
+                <input type="range" id="distance-slider" min="1" max="10" step="0.5" value="5">
+                <div class="slider-labels">
+                    <span>1 km</span>
+                    <span>10 km</span>
+                </div>
+            </div>
+            
+            <div class="setting-group">
+                <label>Debug Info</label>
+                <div class="debug-info">
+                    <div>GPS Accuracy: <span id="debug-accuracy">Loading...</span></div>
+                    <div>Heading: <span id="debug-heading">Loading...</span></div>
+                    <div>Pitch: <span id="debug-pitch">Loading...</span></div>
+                    <div>Loaded POIs: <span id="debug-total-pois">Loading...</span></div>
+                </div>
+            </div>
+            
+            <button id="settings-close">Close</button>
+        </div>
+        
+        <!-- Fallback map view -->
+        <div id="map-view" class="screen">
+            <h2>Nearby POIs</h2>
+            <div id="poi-list"></div>
+            <button id="back-to-ar">Back to AR</button>
+        </div>
+    </div>
+    
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
