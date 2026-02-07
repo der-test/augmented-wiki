@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180">
+  <defs>
+    <linearGradient id="appleBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="appleGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- No rounded corners for Apple touch icon - iOS adds them -->
+  <rect width="180" height="180" fill="url(#appleBg)"/>
+  
+  <!-- AR viewfinder frame -->
+  <g stroke="#fff" stroke-width="4" fill="none" opacity="0.9">
+    <line x1="35" y1="35" x2="55" y2="35"/>
+    <line x1="35" y1="35" x2="35" y2="55"/>
+    
+    <line x1="145" y1="35" x2="125" y2="35"/>
+    <line x1="145" y1="35" x2="145" y2="55"/>
+    
+    <line x1="35" y1="145" x2="55" y2="145"/>
+    <line x1="35" y1="145" x2="35" y2="125"/>
+    
+    <line x1="145" y1="145" x2="125" y2="145"/>
+    <line x1="145" y1="145" x2="145" y2="125"/>
+  </g>
+  
+  <!-- Location pin with AR marker -->
+  <g transform="translate(90, 70)">
+    <path d="M0-22 C-12-22 -22-12 -22,0 C-22,12 0,40 0,40 C0,40 22,12 22,0 C22-12 12-22 0-22Z" 
+          fill="#fff" opacity="0.95"/>
+    <circle cx="0" cy="0" r="9" fill="url(#appleBg)"/>
+    <circle cx="0" cy="0" r="4" fill="#fff"/>
+  </g>
+  
+  <!-- Scanning lines effect -->
+  <g opacity="0.4">
+    <line x1="45" y1="105" x2="135" y2="105" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 6"/>
+    <line x1="45" y1="115" x2="135" y2="115" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 6"/>
+    <line x1="45" y1="125" x2="135" y2="125" stroke="#fff" stroke-width="1.5" stroke-dasharray="3 6"/>
+  </g>
+  
+  <!-- Glow overlay -->
+  <rect width="180" height="90" fill="url(#appleGlow)" opacity="0.3"/>
+</svg>

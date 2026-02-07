@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Gradient background -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#fff;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+  
+  <!-- AR viewfinder frame (rounded square) -->
+  <g stroke="#fff" stroke-width="8" fill="none" opacity="0.9">
+    <line x1="120" y1="120" x2="170" y2="120"/>
+    <line x1="120" y1="120" x2="120" y2="170"/>
+    
+    <line x1="392" y1="120" x2="342" y2="120"/>
+    <line x1="392" y1="120" x2="392" y2="170"/>
+    
+    <line x1="120" y1="392" x2="170" y2="392"/>
+    <line x1="120" y1="392" x2="120" y2="342"/>
+    
+    <line x1="392" y1="392" x2="342" y2="392"/>
+    <line x1="392" y1="392" x2="392" y2="342"/>
+  </g>
+  
+  <!-- Location pin with AR marker -->
+  <g transform="translate(256, 200)">
+    <!-- Pin body -->
+    <path d="M0-50 C-27.6-50 -50-27.6 -50,0 C-50,27.6 0,90 0,90 C0,90 50,27.6 50,0 C50-27.6 27.6-50 0-50Z" 
+          fill="#fff" opacity="0.95"/>
+    <!-- Inner circle -->
+    <circle cx="0" cy="0" r="20" fill="url(#bg)"/>
+    <!-- AR dot -->
+    <circle cx="0" cy="0" r="8" fill="#fff"/>
+  </g>
+  
+  <!-- Scanning lines effect -->
+  <g opacity="0.4">
+    <line x1="140" y1="280" x2="372" y2="280" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+    <line x1="140" y1="300" x2="372" y2="300" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+    <line x1="140" y1="320" x2="372" y2="320" stroke="#fff" stroke-width="2" stroke-dasharray="4 8"/>
+  </g>
+  
+  <!-- Glow overlay -->
+  <rect width="512" height="256" fill="url(#glow)" opacity="0.3"/>
+</svg>
