@@ -291,7 +291,7 @@ export class OverlayRenderer {
 
     // Estimate label dimensions
     const labelWidth = 220;
-    const labelHeight = 80;
+    const labelHeight = 100;
     const verticalOffset = labelHeight + this.minLabelSpacing;
 
     for (const { poiId, state } of visiblePOIs) {
@@ -300,7 +300,7 @@ export class OverlayRenderer {
       let hasCollision = true;
 
       // Try to find non-overlapping position by adjusting vertically
-      while (hasCollision && attempts < 10) {
+      while (hasCollision && attempts < 15) {
         hasCollision = false;
 
         for (const region of occupiedRegions) {
@@ -317,14 +317,14 @@ export class OverlayRenderer {
             if (attempts % 2 === 0) {
               // Shift down
               pos.y += verticalOffset;
-              if (pos.y > this.screenDimensions.height - labelHeight) {
-                pos.y = this.screenDimensions.height - labelHeight;
+              if (pos.y > this.screenDimensions.height - labelHeight - 50) {
+                pos.y = this.screenDimensions.height - labelHeight - 50;
               }
             } else {
               // Shift up
               pos.y -= verticalOffset;
-              if (pos.y < labelHeight) {
-                pos.y = labelHeight;
+              if (pos.y < 50) {
+                pos.y = 50;
               }
             }
             break;
@@ -333,12 +333,10 @@ export class OverlayRenderer {
         attempts++;
       }
 
-      // Only add if we found a valid position
-      if (!hasCollision || attempts < 10) {
-        state.screenPos = pos;
-        result.push({ poiId, state });
-        occupiedRegions.push({ x: pos.x, y: pos.y });
-      }
+      // Always add the POI, even if collision resolution failed (best effort)
+      state.screenPos = pos;
+      result.push({ poiId, state });
+      occupiedRegions.push({ x: pos.x, y: pos.y });
     }
 
     return result;
