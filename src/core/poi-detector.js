@@ -184,13 +184,15 @@ export class POIDetector {
 
     // Extract Wikipedia information
     let wikipediaTitle = null;
+    let wikipediaLanguage = 'en'; // Default to English if not specified
     let wikidataId = null;
 
     // Check for various wikipedia tag formats
     // Format 1: wikipedia=en:Article_Name or language:Article_Name
     if (tags.wikipedia) {
       const parts = tags.wikipedia.split(':');
-      if (parts.length >= 2) {
+      if (parts.length >= 2 && parts[0].length === 2) {
+        wikipediaLanguage = parts[0];
         // Take everything after first colon as title
         wikipediaTitle = parts.slice(1).join(':');
       } else {
@@ -204,8 +206,14 @@ export class POIDetector {
       if (wikiKeys.length > 0) {
         // Prefer English, otherwise take first available
         const enKey = wikiKeys.find(k => k === 'wikipedia:en');
-        const keyToUse = enKey || wikiKeys[0];
-        wikipediaTitle = tags[keyToUse];
+        if (enKey) {
+            wikipediaLanguage = 'en';
+            wikipediaTitle = tags[enKey];
+        } else {
+            const key = wikiKeys[0];
+            wikipediaLanguage = key.split(':')[1] || 'en';
+            wikipediaTitle = tags[key];
+        }
       }
     }
 
@@ -214,10 +222,14 @@ export class POIDetector {
       wikidataId = tags.wikidata;
     }
 
-    // Skip if no Wikipedia/Wikidata information found
-    if (!wikipediaTitle && !wikidataId) {
+    // STRICT FILTER: Only allow POIs with an actual Wikipedia article
+    // Pure Wikidata items are often too obscure or lack good summaries
+    if (!wikipediaTitle) {
       return null;
     }
+
+    // Clean title
+    wikipediaTitle = wikipediaTitle.trim();
 
     // Calculate distance and bearing from user
     const distance = calculateDistance(
@@ -236,15 +248,16 @@ export class POIDetector {
 
     return {
       id: `${element.type}/${element.id}`,
-      name: tags.name || 'Unknown',
+      name: tags.name || wikipediaTitle.replace(/_/g, ' '), // Fallback to wiki title if name missing
       lat,
       lng,
       distance: Math.round(distance),
       bearing: Math.round(bearing),
       wikipediaTitle,
+      wikipediaLanguage,
       wikidataId,
       type: element.type,
-      tags: tags // Include all tags for potential future use
+      tags: tags
     };
   }
 
@@ -296,12 +309,33 @@ export class POIDetector {
         console.log(`Received ${elements.length} elements from Overpass API`);
 
         // Parse elements into POI objects
-        const pois = elements
+        const parsedPOIs = elements
           .map(element => this._parseElement(element, { lat, lng }))
-          .filter(poi => poi !== null) // Remove invalid POIs
+          .filter(poi => poi !== null); // Remove invalid POIs
+
+        // Deduplicate POIs based on Wikipedia title
+        // If multiple POIs share the same article (e.g. node vs way), keep the one with 'way' type or just the first
+        const uniquePOIsMap = new Map();
+        
+        parsedPOIs.forEach(poi => {
+            const key = poi.wikipediaTitle.toLowerCase();
+            
+            if (!uniquePOIsMap.has(key)) {
+                uniquePOIsMap.set(key, poi);
+            } else {
+                // If duplicate exists, prefer 'way' (often more accurate/substantial) over 'node'
+                // Or prefer the one that has a name if the stored one doesn't
+                const existing = uniquePOIsMap.get(key);
+                if (poi.type === 'way' && existing.type === 'node') {
+                    uniquePOIsMap.set(key, poi);
+                }
+            }
+        });
+
+        const pois = Array.from(uniquePOIsMap.values())
           .sort((a, b) => a.distance - b.distance); // Sort by distance
 
-        console.log(`Parsed ${pois.length} valid POIs`);
+        console.log(`Parsed ${pois.length} valid unique POIs`);
 
         // Cache results
         this.cache.set(cacheKey, {

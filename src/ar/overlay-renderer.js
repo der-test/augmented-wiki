@@ -282,6 +282,8 @@ export class OverlayRenderer {
   /**
    * Collision detection with vertical repositioning
    * Uses a slot-search approach to find the nearest vertical space
+   * Scales down labels if density is high
+   * Drops labels that simply cannot fit without overlapping
    * @private
    * @param {Array} visiblePOIs - Array of { poiId, state }
    * @returns {Array} Array with adjusted positions to prevent overlaps
@@ -290,21 +292,33 @@ export class OverlayRenderer {
     const result = [];
     const occupiedRegions = [];
 
-    // Exact label dimensions from CSS/Main
-    const labelWidth = 220; 
-    const labelHeight = 100;
-    // Small buffer for aesthetics
-    const padding = 10; 
+    // Base dimensions from CSS (max-width: 200px)
+    const baseWidth = 200; 
+    const baseHeight = 90; // Approximate height with text
 
-    // Search offsets: 0, +1, -1, +2, -2, etc. (multiples of height+padding)
-    // Checks ~8 slots up and down to find a fit
+    // Dynamic sizing based on density
+    let scale = 1.0;
+    if (visiblePOIs.length > 20) scale = 0.75;
+    else if (visiblePOIs.length > 10) scale = 0.9;
+
+    const labelWidth = baseWidth * scale;
+    const labelHeight = baseHeight * scale;
+    const verticalStep = labelHeight + 2; // Tiny gap
+
+    // Use a slightly smaller box for collision checking to allow visual padding overlap
+    // This packs them tighter without text overlap
+    const collisionWidth = labelWidth * 0.9;
+    const collisionHeight = labelHeight * 0.9;
+
+    // Store scale in state so we can apply it to DOM
+    visiblePOIs.forEach(p => p.state.scale = scale);
+
+    // Search offsets: 0, +1, -1, +2, -2...
     const offsets = [0];
-    for (let i = 1; i <= 8; i++) {
+    for (let i = 1; i <= 12; i++) {
         offsets.push(i);
         offsets.push(-i);
     }
-
-    const verticalStep = labelHeight + padding;
 
     for (const { poiId, state } of visiblePOIs) {
       const originalPos = { ...state.screenPos };
@@ -315,8 +329,9 @@ export class OverlayRenderer {
       for (const k of offsets) {
           const candidateY = originalPos.y + (k * verticalStep);
           
-          // Check screen bounds (with margin)
-          if (candidateY < 50 || candidateY > this.screenDimensions.height - labelHeight - 50) {
+          // Check screen bounds
+          // Header (50px) + Footer (100px) margins
+          if (candidateY < 60 || candidateY > this.screenDimensions.height - labelHeight - 120) {
               continue;
           }
 
@@ -326,8 +341,7 @@ export class OverlayRenderer {
               const dx = Math.abs(originalPos.x - region.x);
               const dy = Math.abs(candidateY - region.y);
               
-              // Strict non-overlap check: distance between centers/tops < dimension + padding
-              if (dx < (labelWidth + padding) && dy < (labelHeight + padding)) {
+              if (dx < collisionWidth && dy < collisionHeight) {
                   collision = true;
                   break;
               }
@@ -340,15 +354,14 @@ export class OverlayRenderer {
           }
       }
 
-      // If no slot found, force it inside bounds (overlapping is unavoidable here)
-      if (!foundSlot) {
-          let clampedY = Math.max(50, Math.min(originalPos.y, this.screenDimensions.height - labelHeight - 50));
-          bestPos = { x: originalPos.x, y: clampedY };
+      // If we found a slot, accept it. 
+      // If NOT found, we SKIP this POI entirely (prioritizing readability over count)
+      // Since the list is sorted by distance, we are dropping the furthest POIs
+      if (foundSlot) {
+          state.screenPos = bestPos;
+          result.push({ poiId, state });
+          occupiedRegions.push(bestPos);
       }
-
-      state.screenPos = bestPos;
-      result.push({ poiId, state });
-      occupiedRegions.push(bestPos);
     }
 
     return result;
@@ -361,12 +374,11 @@ export class OverlayRenderer {
    */
   _updateDOM(displayPOIs) {
     const displayPOIIds = new Set(displayPOIs.map(p => p.poiId));
-    const allActivePOIIds = new Set(this.activePOIs.keys());
-
-    // Remove labels for POIs that are no longer active OR visible
+    
+    // Iterate over ALL current labels to find ones that need removal
     for (const [poiId, element] of this.labelElements) {
-      const shouldRemove = !displayPOIIds.has(poiId) || !allActivePOIIds.has(poiId);
-      if (shouldRemove) {
+       // If a label exists but is NOT in the current display set, remove it
+      if (!displayPOIIds.has(poiId)) {
         this._fadeOutLabel(poiId, element);
       }
     }
@@ -441,8 +453,9 @@ export class OverlayRenderer {
 
     // Initial content (name and distance)
     const poi = state.poi;
+    const lang = poi.wikipediaLanguage || 'en';
     const wikiUrl = poi.wikipediaTitle 
-      ? `https://en.wikipedia.org/wiki/${encodeURIComponent(poi.wikipediaTitle.replace(/ /g, '_'))}`
+      ? `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(poi.wikipediaTitle.replace(/ /g, '_'))}`
       : null;
     
     label.innerHTML = `
@@ -482,7 +495,8 @@ export class OverlayRenderer {
     // This ensures position updates are immediately visible
     element.style.left = `${pos.x}px`;
     element.style.top = `${pos.y}px`;
-    element.style.transform = `translate(-50%, 0)`; // Center horizontally only
+    element.style.transform = `translate(-50%, 0) scale(${state.scale || 1})`; // Center horizontally + Apply scale
+    element.style.transformOrigin = 'center top'; // Scale from top center to maintain relative position
     element.style.zIndex = zIndex;
   }
 
@@ -495,13 +509,14 @@ export class OverlayRenderer {
   _updateLabelContent(element, state) {
     const article = state.articleData;
     const poi = state.poi;
+    const lang = poi.wikipediaLanguage || 'en';
     
     if (!article) {
       return;
     }
 
     const wikiUrl = article.url || (poi.wikipediaTitle 
-      ? `https://en.wikipedia.org/wiki/${encodeURIComponent(poi.wikipediaTitle.replace(/ /g, '_'))}`
+      ? `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(poi.wikipediaTitle.replace(/ /g, '_'))}`
       : null);
 
     // Update with article snippet

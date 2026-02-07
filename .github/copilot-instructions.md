@@ -70,6 +70,7 @@ ngrok http 3000  # get public HTTPS URL for phone
 
 ### POI Filtering (Overpass API)
 - **ONLY fetch tourism attractions, museums, and historic sites** with Wikipedia/Wikidata tags
+- **Always fetch 10km radius** regardless of slider setting to allow instant client-side filtering
 - Query structure:
   ```
   ["tourism"~"^(attraction|museum)$"][~"^(wikipedia|wikidata)$"~"."](if:t["name"])

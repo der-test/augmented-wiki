@@ -21,8 +21,10 @@ class AugmentedWikiApp {
         // State
         this.currentScreen = 'permission';
         this.isARActive = false;
-        this.maxDistance = 5000; // Default 5km
+        this.maxDistance = 5000; // Default 5km visible
+        this.fetchRadius = 10000; // ALWAYS fetch 10km to avoid re-fetching on slider move
         this.isFetchingPOIs = false;
+        this.lastFetchedPOIs = []; // Store fetched POIs for local filtering
 
         // UI elements
         this.elements = {
@@ -37,11 +39,14 @@ class AugmentedWikiApp {
             gpsStatus: document.getElementById('gps-status'),
             poiCount: document.getElementById('poi-count'),
             poiList: document.getElementById('poi-list'),
-            settingsBtn: document.getElementById('settings-btn'),
-            settingsScreen: document.getElementById('settings-screen'),
-            settingsClose: document.getElementById('settings-close'),
+            
+            // New UI Elements
+            debugToggleBtn: document.getElementById('debug-toggle-btn'),
+            debugPanel: document.getElementById('debug-panel'),
             distanceSlider: document.getElementById('distance-slider'),
-            distanceValue: document.getElementById('distance-value'),
+            distanceLabel: document.getElementById('distance-label'),
+            
+            // Debug elements
             debugAccuracy: document.getElementById('debug-accuracy'),
             debugHeading: document.getElementById('debug-heading'),
             debugPitch: document.getElementById('debug-pitch'),
@@ -52,6 +57,7 @@ class AugmentedWikiApp {
         this.checkSupport();
 
         // Throttle POI updates - only fetch new POIs every 5 seconds
+        // Only triggered by significant movement now, not slider
         this.updatePOIs = throttle(this._updatePOIs.bind(this), 5000);
         this.lastPOIFetchTime = 0;
     }
@@ -81,9 +87,14 @@ class AugmentedWikiApp {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.calibrationDoneBtn.addEventListener('click', () => this.finishCalibration());
         this.elements.backToARBtn.addEventListener('click', () => this.showARView());
-        this.elements.settingsBtn.addEventListener('click', () => this.showSettings());
-        this.elements.settingsClose.addEventListener('click', () => this.closeSettings());
-        this.elements.distanceSlider.addEventListener('input', (e) => this.updateDistance(e.target.value));
+        
+        // Debug toggle
+        this.elements.debugToggleBtn.addEventListener('click', () => {
+            this.elements.debugPanel.classList.toggle('hidden');
+        });
+
+        // Live slider update (client-side filtering only)
+        this.elements.distanceSlider.addEventListener('input', (e) => this.handleDistanceChange(e.target.value));
     }
 
     /**
@@ -212,20 +223,21 @@ class AugmentedWikiApp {
 
         this.lastPOIFetchTime = now;
 
-        // Show loading state
-        this.elements.debugTotalPois.textContent = 'Loading...';
+        // Show loading state in Info Bar
+        this.elements.poiCount.innerHTML = '<span class="loading-spinner">↻</span> Loading...';
         this.isFetchingPOIs = true;
 
         try {
             const orientation = this.geolocator.getOrientation();
             
-            console.log(`Fetching POIs near ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)} within ${this.maxDistance}m`);
+            console.log(`Fetching POIs near ${position.lat.toFixed(4)}, ${position.lng.toFixed(4)} within ${this.fetchRadius}m`);
             
             // Fetch POIs from Overpass API
+            // ALWAYS fetch the maximum radius (10km or fetchRadius) so slider can work locally
             const allPOIs = await this.poiDetector.fetchNearbyPOIs(
                 position.lat,
                 position.lng,
-                this.maxDistance
+                this.fetchRadius
             );
 
             console.log(`Fetched ${allPOIs.length} POIs from Overpass API`);
@@ -273,16 +285,23 @@ class AugmentedWikiApp {
                 });
             }
 
+            this.elements.debugHeading.textContent = orientation.heading.toFixed(1) + '°';
+            this.elements.debugPitch.textContent = orientation.pitch.toFixed(1) + '°';
+            
+            // New debug element
+            const dist = this.elements.debugDistVal || document.getElementById('debug-dist-val');
+            if(dist) dist.textContent = this.maxDistance.toFixed(0);
+
+            // Store for local filtering
+            this.lastFetchedPOIs = allPOIs;
+
             // Update overlay
             if (this.overlayRenderer) {
-                this.overlayRenderer.updatePOIs(visiblePOIs);
+                this.overlayRenderer.updatePOIs(allPOIs);
             }
 
-            // Update status
-            this.elements.poiCount.textContent = `${visiblePOIs.length} POIs`;
-            
-            // Update debug info
-            this.elements.debugTotalPois.textContent = `${allPOIs.length} (${visiblePOIs.length} visible)`;
+            // Update UI with correct valid count based on CURRENT slider
+            this._updateVisibleCount();
 
         } catch (error) {
             console.error('POI update error:', error);
@@ -308,34 +327,35 @@ class AugmentedWikiApp {
     }
 
     /**
-     * Show settings screen
+     * Show settings screen - REMOVED
      */
     showSettings() {
-        this.showScreen('settings');
-        if (this.overlayRenderer) {
-            this.overlayRenderer.stop();
-        }
+        // this.showScreen('settings');
     }
 
     /**
-     * Close settings and return to AR
+     * Close settings and return to AR - REMOVED
      */
     closeSettings() {
-        this.showARView();
+        // this.showARView();
     }
 
     /**
      * Update maximum distance setting
      */
-    updateDistance(value) {
+    /**
+     * Handle distance slider change
+     * Only updates local visibility, DOES NOT fetch new POIs
+     */
+    handleDistanceChange(value) {
         const distanceKm = parseFloat(value);
         this.maxDistance = distanceKm * 1000; // Convert to meters
-        this.elements.distanceValue.textContent = distanceKm.toFixed(1);
+        this.elements.distanceLabel.textContent = distanceKm.toFixed(1);
         
-        // Update overlay renderer if active
+        // Update overlay renderer immediately
         if (this.overlayRenderer) {
             this.overlayRenderer.updateMaxDistance(this.maxDistance);
-
+            
              // If distance is maxed out (10km), allow more labels
              if (this.maxDistance >= 10000) {
                 this.overlayRenderer.maxLabels = 50; 
@@ -344,10 +364,24 @@ class AugmentedWikiApp {
             }
         }
         
-        // Refresh POIs with new distance
-        if (this.isARActive) {
-            this.updatePOIs();
-        }
+        // Update UI counts locally
+        this._updateVisibleCount();
+    }
+
+    /**
+     * Helper to update visible POI count based on current distance setting
+     * @private
+     */
+    _updateVisibleCount() {
+        if (!this.lastFetchedPOIs) return;
+        
+        const count = this.lastFetchedPOIs.filter(p => p.distance <= this.maxDistance).length;
+        this.elements.poiCount.textContent = `${count} POIs`;
+        this.elements.debugTotalPois.textContent = `${this.lastFetchedPOIs.length} loaded (${count} in range)`;
+        
+        // Also update debug distance value
+        const dist = this.elements.debugDistVal || document.getElementById('debug-dist-val');
+        if(dist) dist.textContent = this.maxDistance.toFixed(0);
     }
 
     /**
