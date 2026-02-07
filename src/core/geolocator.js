@@ -159,10 +159,10 @@ export class Geolocator {
      */
     _startPositionTracking() {
         return new Promise((resolve, reject) => {
-            // Initial check: Low accuracy, accept cached.
-            // This is primarily to trigger the Permission Prompt quickly and robustly.
+            // iOS Safari requires enableHighAccuracy: true to reliably show
+            // the native location permission prompt.
             const initialOptions = {
-                enableHighAccuracy: false,
+                enableHighAccuracy: true,
                 timeout: 30000,
                 maximumAge: 0
             };

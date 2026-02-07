@@ -112,42 +112,69 @@ class AugmentedWikiApp {
             return;
         }
 
+        // iOS Safari requires enableHighAccuracy: true to reliably trigger the
+        // native location permission prompt. Using true on all platforms is fine.
         const initialOptions = {
-            enableHighAccuracy: false,
+            enableHighAccuracy: true,
             timeout: 30000,
             maximumAge: 0
         };
-        
-        // On iOS Safari, the geolocation prompt must be triggered directly from the user gesture.
-        // Call getCurrentPosition in the click handler to preserve gesture context.
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                this.geolocator.startWithPosition(position)
-                    .then(() => {
-                        // 2. Request Camera
-                        this.elements.startBtn.textContent = 'Requesting Camera...';
-                        return this.cameraStream.start(this.elements.camera);
-                    })
-                    .then(() => {
-                        // Step 3: Show calibration screen
-                        this.showScreen('calibration');
-                    })
-                    .catch((error) => {
-                        console.error('Startup error:', error);
-                        this.showError(error.message);
-                        this.elements.startBtn.disabled = false;
-                        this.elements.startBtn.textContent = 'Start';
-                    });
-            },
-            (error) => {
-                const message = this.geolocator.getPositionErrorMessage(error);
-                console.error('Geolocation error:', error);
-                this.showError(message);
+
+        // On iOS Safari, permission prompts must be initiated synchronously from a
+        // user gesture handler. Use Promise.all to request Camera and Location in
+        // parallel so both calls attach to the original button tap event. Requesting
+        // them sequentially (location first, camera in the async success callback)
+        // causes iOS Safari to silently deny the second permission.
+        const locationPromise = new Promise((resolve, reject) => {
+            // iOS Safari may occasionally fail to fire either callback.
+            // Add a fallback timeout beyond the API timeout as a safety net.
+            const fallbackTimeout = setTimeout(() => {
+                reject({
+                    code: 3,
+                    PERMISSION_DENIED: 1,
+                    POSITION_UNAVAILABLE: 2,
+                    TIMEOUT: 3
+                });
+            }, 35000);
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    clearTimeout(fallbackTimeout);
+                    resolve(position);
+                },
+                (error) => {
+                    clearTimeout(fallbackTimeout);
+                    reject(error);
+                },
+                initialOptions
+            );
+        });
+
+        const cameraPromise = this.cameraStream.start(this.elements.camera);
+
+        Promise.all([locationPromise, cameraPromise])
+            .then(([position]) => {
+                this.elements.startBtn.textContent = 'Requesting Camera...';
+                return this.geolocator.startWithPosition(position);
+            })
+            .then(() => {
+                this.showScreen('calibration');
+            })
+            .catch((error) => {
+                // Clean up camera if it started but location failed (or vice versa)
+                this.cameraStream.stop();
+
+                console.error('Startup error:', error);
+                // GeolocationPositionError has a numeric .code property (1-3)
+                if (error && typeof error.code === 'number' && error.code >= 1 && error.code <= 3) {
+                    const message = this.geolocator.getPositionErrorMessage(error);
+                    this.showError(message);
+                } else {
+                    this.showError(error.message);
+                }
                 this.elements.startBtn.disabled = false;
                 this.elements.startBtn.textContent = 'Start';
-            },
-            initialOptions
-        );
+            });
     }
 
     /**
