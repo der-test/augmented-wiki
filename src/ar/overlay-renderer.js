@@ -278,39 +278,53 @@ export class OverlayRenderer {
   }
 
   /**
-   * Basic collision detection - prevent overlapping labels
+   * Collision detection with vertical repositioning
    * @private
    * @param {Array} visiblePOIs - Array of { poiId, state }
-   * @returns {Array} Filtered array without collisions
+   * @returns {Array} Array with adjusted positions to prevent overlaps
    */
   _resolveCollisions(visiblePOIs) {
     const result = [];
     const occupiedRegions = [];
 
-    // Estimate label dimensions for better collision detection
-    const labelWidth = 220; // Approximate max width
-    const labelHeight = 80; // Approximate height with description
+    // Estimate label dimensions
+    const labelWidth = 220;
+    const labelHeight = 80;
+    const verticalOffset = labelHeight + this.minLabelSpacing;
 
     for (const { poiId, state } of visiblePOIs) {
-      const pos = state.screenPos;
-      let hasCollision = false;
+      let pos = { ...state.screenPos };
+      let attempts = 0;
+      let hasCollision = true;
 
-      // Check against already placed labels using rectangular bounds
-      for (const region of occupiedRegions) {
-        const dx = Math.abs(pos.x - region.x);
-        const dy = Math.abs(pos.y - region.y);
-        
-        // Check if bounding boxes overlap with padding
-        const horizontalOverlap = dx < (labelWidth / 2 + this.minLabelSpacing / 2);
-        const verticalOverlap = dy < (labelHeight / 2 + this.minLabelSpacing / 2);
+      // Try to find non-overlapping position by adjusting vertically
+      while (hasCollision && attempts < 10) {
+        hasCollision = false;
 
-        if (horizontalOverlap && verticalOverlap) {
-          hasCollision = true;
-          break;
+        for (const region of occupiedRegions) {
+          const dx = Math.abs(pos.x - region.x);
+          const dy = Math.abs(pos.y - region.y);
+          
+          const horizontalOverlap = dx < (labelWidth / 2 + this.minLabelSpacing / 2);
+          const verticalOverlap = dy < (labelHeight / 2 + this.minLabelSpacing / 2);
+
+          if (horizontalOverlap && verticalOverlap) {
+            hasCollision = true;
+            // Shift down to avoid collision
+            pos.y += verticalOffset;
+            // Keep within screen bounds
+            if (pos.y > this.screenDimensions.height - labelHeight) {
+              pos.y = this.screenDimensions.height - labelHeight;
+            }
+            break;
+          }
         }
+        attempts++;
       }
 
-      if (!hasCollision) {
+      // Only add if we found a valid position
+      if (!hasCollision || attempts < 10) {
+        state.screenPos = pos;
         result.push({ poiId, state });
         occupiedRegions.push({ x: pos.x, y: pos.y });
       }

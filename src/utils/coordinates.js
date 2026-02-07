@@ -214,28 +214,21 @@ export function projectToScreen(
   // Horizontal position: map azimuthDiff from [-halfHFOV, +halfHFOV] to [0, screenWidth]
   const x = (screenWidth / 2) + (azimuthDiff / horizontalFOV) * screenWidth;
   
-  // Vertical position: Use full screen height for depth perception
-  // Distribute POIs evenly across screen based on distance
-  // Closer POIs (< 1km) appear in lower half (50-90% from top)
-  // Medium POIs (1-3km) appear in middle (25-50% from top)
-  // Far POIs (> 3km) appear in upper part (10-25% from top)
-  let yPercent;
-  if (distance < 1000) {
-    // Close: 50-90% from top (lower half)
-    yPercent = 0.50 + (distance / 1000) * 0.40;
-  } else if (distance < 3000) {
-    // Medium: 25-50% from top (middle)
-    yPercent = 0.50 - ((distance - 1000) / 2000) * 0.25;
-  } else {
-    // Far: 10-25% from top (upper part)
-    yPercent = 0.25 - (Math.min(distance - 3000, 2000) / 2000) * 0.15;
-  }
+  // Vertical position: Distribute evenly across FULL screen height based on distance
+  // Use linear interpolation: closer POIs at bottom (90%), farther at top (10%)
+  // maxDistance = 10km assumed for now (will be adjusted by collision detection)
+  const maxDistance = 10000; // 10km
+  const normalizedDistance = Math.min(distance / maxDistance, 1.0);
+  
+  // Map normalized distance to screen: 0m->90%, 10km->10%
+  // Close POIs at bottom, far POIs at top
+  const yPercent = 0.90 - (normalizedDistance * 0.80);
   
   const y = screenHeight * yPercent;
   
   // Debug: log distance distribution occasionally
-  if (Math.random() < 0.1) {
-    console.log(`POI at ${distance.toFixed(0)}m -> y=${yPercent.toFixed(2)} (${(yPercent*100).toFixed(0)}% from top)`);
+  if (Math.random() < 0.05) {
+    console.log(`POI at ${distance.toFixed(0)}m -> y=${y.toFixed(0)}px (${(yPercent*100).toFixed(0)}% from top)`);
   }
   
   return {
