@@ -116,39 +116,62 @@ class AugmentedWikiApp {
             return;
         }
 
-        // iOS Safari requires enableHighAccuracy: true to reliably trigger the
-        // native location permission prompt.
-        const initialOptions = {
-            enableHighAccuracy: true,
-            timeout: 30000,
-            maximumAge: 0
+        // Use watchPosition instead of getCurrentPosition.
+        // iOS Safari has a long-standing bug where getCurrentPosition sometimes
+        // fires the error callback with PERMISSION_DENIED instantly, without
+        // ever showing the native location prompt to the user.
+        // watchPosition, called from the same user-gesture context, reliably
+        // triggers the prompt on all iOS Safari versions.
+        let settled = false;
+
+        const onSuccess = (position) => {
+            if (settled) return;
+            settled = true;
+            navigator.geolocation.clearWatch(watchId);
+            clearTimeout(safetyTimeout);
+
+            this.geolocator.startWithPosition(position)
+                .then(() => {
+                    this.showScreen('calibration');
+                })
+                .catch((error) => {
+                    console.error('Geolocator start error:', error);
+                    this.showError(error.message);
+                    this.elements.startBtn.disabled = false;
+                    this.elements.startBtn.textContent = 'Start';
+                });
         };
 
-        // Call getCurrentPosition directly in the click handler so the call
-        // is registered synchronously within the user gesture context.
-        navigator.geolocation.getCurrentPosition(
-            (position) => {
-                // Location granted — initialise geolocator with this fix
-                this.geolocator.startWithPosition(position)
-                    .then(() => {
-                        this.showScreen('calibration');
-                    })
-                    .catch((error) => {
-                        console.error('Geolocator start error:', error);
-                        this.showError(error.message);
-                        this.elements.startBtn.disabled = false;
-                        this.elements.startBtn.textContent = 'Start';
-                    });
-            },
-            (error) => {
-                console.error('Geolocation error:', error);
-                const message = this.geolocator.getPositionErrorMessage(error);
-                this.showError(message);
-                this.elements.startBtn.disabled = false;
-                this.elements.startBtn.textContent = 'Start';
-            },
-            initialOptions
+        const onError = (error) => {
+            if (settled) return;
+            settled = true;
+            navigator.geolocation.clearWatch(watchId);
+            clearTimeout(safetyTimeout);
+
+            console.error('Geolocation error:', error);
+            const message = this.geolocator.getPositionErrorMessage(error);
+            this.showError(message);
+            this.elements.startBtn.disabled = false;
+            this.elements.startBtn.textContent = 'Start';
+        };
+
+        // Must be called synchronously in the click handler to preserve the
+        // user-gesture context that iOS Safari requires for permission prompts.
+        const watchId = navigator.geolocation.watchPosition(
+            onSuccess,
+            onError,
+            { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 }
         );
+
+        // Safety net: if neither callback fires within 30s, reset the UI.
+        const safetyTimeout = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            navigator.geolocation.clearWatch(watchId);
+            this.showError('Location timeout. Retry.');
+            this.elements.startBtn.disabled = false;
+            this.elements.startBtn.textContent = 'Start';
+        }, 30000);
     }
 
     /**
