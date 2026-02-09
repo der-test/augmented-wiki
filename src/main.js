@@ -88,6 +88,8 @@ class AugmentedWikiApp {
         this.elements.startBtn.addEventListener('click', () => this.start());
         this.elements.calibrationDoneBtn.addEventListener('click', () => this.finishCalibration());
         this.elements.backToARBtn.addEventListener('click', () => this.showARView());
+        
+        // Map view toggle
         this.elements.mapViewBtn.addEventListener('click', () => this.showMapView());
         
         // Debug toggle
@@ -467,71 +469,47 @@ class AugmentedWikiApp {
         }
 
         const position = this.geolocator.getPosition();
-        if (!position) {
-            this.elements.poiList.innerHTML = '<p style="text-align: center; color: #999;">No location available</p>';
-            return;
-        }
+        if (!position) return;
 
-        // Use cached POIs if available, otherwise fetch
-        let pois = this.lastFetchedPOIs || [];
-        
-        if (pois.length === 0) {
-            this.elements.poiList.innerHTML = '<p style="text-align: center; color: #999;">Loading POIs...</p>';
-            try {
-                pois = await this.poiDetector.fetchNearbyPOIs(
-                    position.lat,
-                    position.lng,
-                    this.maxDistance
-                );
-            } catch (error) {
-                console.error('Map view error:', error);
-                this.elements.poiList.innerHTML = '<p style="text-align: center; color: #f44;">Failed to load POIs</p>';
-                return;
-            }
-        }
+        try {
+            const pois = await this.poiDetector.fetchNearbyPOIs(
+                position.lat,
+                position.lng,
+                5000
+            );
 
-        // Filter by current max distance and sort
-        const visiblePOIs = pois.filter(p => p.distance <= this.maxDistance);
-        visiblePOIs.sort((a, b) => a.distance - b.distance);
+            // Sort by distance
+            pois.sort((a, b) => a.distance - b.distance);
 
-        if (visiblePOIs.length === 0) {
-            this.elements.poiList.innerHTML = '<p style="text-align: center; color: #999;">No POIs found in range</p>';
-            return;
-        }
+            // Render list
+            this.elements.poiList.innerHTML = pois.slice(0, 20).map(poi => `
+                <div class="poi-item">
+                    <h3>${poi.name}</h3>
+                    <div class="distance">${this.formatDistance(poi.distance)}</div>
+                    <div class="description">Loading...</div>
+                </div>
+            `).join('');
 
-        // Render list
-        this.elements.poiList.innerHTML = visiblePOIs.slice(0, 20).map(poi => `
-            <div class="poi-item">
-                <h3>${poi.name}</h3>
-                <div class="distance">${this.formatDistance(poi.distance)}</div>
-                <div class="description">Loading...</div>
-            </div>
-        `).join('');
-
-        // Fetch Wikipedia data
-        for (let i = 0; i < Math.min(20, visiblePOIs.length); i++) {
-            const poi = visiblePOIs[i];
-            if (poi.wikipediaTitle) {
-                try {
-                    const article = await this.wikiClient.fetchByTitle(poi.wikipediaTitle);
-                    // Update description
-                    const items = this.elements.poiList.querySelectorAll('.poi-item');
-                    if (items[i]) {
-                        const desc = items[i].querySelector('.description');
-                        desc.textContent = article.description || article.extract || 'No description available';
-                        
-                        // Make clickable
-                        items[i].style.cursor = 'pointer';
-                        items[i].addEventListener('click', () => {
-                            if (article.url) {
-                                window.open(article.url, '_blank');
-                            }
-                        });
+            // Fetch Wikipedia data
+            for (const poi of pois.slice(0, 20)) {
+                if (poi.wikipediaTitle) {
+                    try {
+                        const article = await this.wikiClient.fetchByTitle(poi.wikipediaTitle);
+                        // Update description
+                        const items = this.elements.poiList.querySelectorAll('.poi-item');
+                        const index = pois.findIndex(p => p.id === poi.id);
+                        if (items[index]) {
+                            const desc = items[index].querySelector('.description');
+                            desc.textContent = article.description || article.extract || 'No description available';
+                        }
+                    } catch (error) {
+                        console.error('Failed to fetch article for', poi.name);
                     }
-                } catch (error) {
-                    console.error('Failed to fetch article for', poi.name);
                 }
             }
+
+        } catch (error) {
+            console.error('Map view error:', error);
         }
     }
 
