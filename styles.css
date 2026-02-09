@@ -192,11 +192,16 @@ button:active {
 .icon-btn {
     background: transparent;
     border: none;
-    padding: 4px;
+    padding: 0;
+    width: 32px;
+    height: 32px;
     font-size: 18px;
     cursor: pointer;
     border-radius: 50%;
     transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .icon-btn:hover {
