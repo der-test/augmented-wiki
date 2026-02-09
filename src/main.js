@@ -41,7 +41,6 @@ class AugmentedWikiApp {
             poiList: document.getElementById('poi-list'),
             
             // New UI Elements
-            mapViewBtn: document.getElementById('map-view-btn'),
             debugToggleBtn: document.getElementById('debug-toggle-btn'),
             debugPanel: document.getElementById('debug-panel'),
             distanceSlider: document.getElementById('distance-slider'),
@@ -89,8 +88,8 @@ class AugmentedWikiApp {
         this.elements.calibrationDoneBtn.addEventListener('click', () => this.finishCalibration());
         this.elements.backToARBtn.addEventListener('click', () => this.showARView());
         
-        // Map view toggle
-        this.elements.mapViewBtn.addEventListener('click', () => this.showMapView());
+        // Map view toggle - click on POI count
+        this.elements.poiCount.addEventListener('click', () => this.showMapView());
         
         // Debug toggle
         this.elements.debugToggleBtn.addEventListener('click', () => {
